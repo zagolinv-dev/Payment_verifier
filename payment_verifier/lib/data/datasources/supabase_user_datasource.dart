@@ -27,4 +27,8 @@ class SupabaseUserDatasource {
 
     return UserProfileModel.fromJson(response as Map<String, dynamic>);
   }
+
+  Future<void> deleteUser(String userId) async {
+    await _client.from(AppConstants.profilesTable).delete().eq('id', userId);
+  }
 }

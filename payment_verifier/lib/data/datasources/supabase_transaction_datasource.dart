@@ -23,10 +23,9 @@ class SupabaseTransactionDatasource {
         .map((e) => TransactionModel.fromJson(e as Map<String, dynamic>))
         .toList();
 
-    // Client-side filtering
     if (statusFilter != null && statusFilter != 'All Status') {
       transactions = transactions
-          .where((t) => t.status.value == statusFilter)
+          .where((t) => t.status.name.toUpperCase() == statusFilter.toUpperCase())
           .toList();
     }
     if (bankFilter != null && bankFilter != 'All Banks') {
@@ -64,6 +63,11 @@ class SupabaseTransactionDatasource {
     required String buyerName,
     required double amount,
     double tip = 0.0,
+    String? imageUrl,
+    double riskScore = 0.0,
+    List<String> riskFlags = const [],
+    double orderTotal = 0.0,
+    String status = 'VERIFIED',
   }) async {
     final userId = _client.auth.currentUser?.id;
     final data = {
@@ -72,8 +76,12 @@ class SupabaseTransactionDatasource {
       'buyer_name': buyerName,
       'amount': amount,
       'tip': tip,
-      'status': 'VERIFIED',
+      'status': status,
       'verified_by': userId,
+      'receipt_image': imageUrl,
+      'risk_score': riskScore,
+      'risk_flags': riskFlags,
+      'order_total': orderTotal,
     };
 
     final response = await _client
@@ -83,6 +91,13 @@ class SupabaseTransactionDatasource {
         .single();
 
     return TransactionModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  Future<void> updateTransactionStatus(String id, String status) async {
+    await _client
+        .from(AppConstants.transactionsTable)
+        .update({'status': status})
+        .eq('id', id);
   }
 
   Future<DashboardMetrics> getDashboardMetrics() async {
@@ -97,7 +112,9 @@ class SupabaseTransactionDatasource {
       totalIncome: all.fold(0.0, (sum, t) => sum + t.amount),
       totalTips: all.fold(0.0, (sum, t) => sum + t.tip),
       verifiedToday: todayTx.where((t) => t.status == TransactionStatus.verified).length,
-      failedToday: todayTx.where((t) => t.status == TransactionStatus.failed).length,
+      failedToday: todayTx.where((t) =>
+          t.status == TransactionStatus.failed ||
+          t.status == TransactionStatus.fraudSuspected).length,
       todayTotal: todayTx.fold(0.0, (sum, t) => sum + t.total),
       todayCount: todayTx.length,
     );

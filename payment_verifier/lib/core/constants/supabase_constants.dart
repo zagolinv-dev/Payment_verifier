@@ -1,16 +1,19 @@
-/// T's Pay — Supabase Configuration
+/// T's Verify — Supabase Configuration
 ///
-/// ⚠️  REPLACE THESE VALUES with your actual Supabase project credentials.
-/// Find them at: https://supabase.com/dashboard → Project Settings → API
+/// Loads credentials from .env file at the project root.
+/// Copy .env.example to .env and fill in your Supabase project credentials.
 library;
+
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SupabaseConstants {
   SupabaseConstants._();
 
   /// Your Supabase project URL
-  /// Example: 'https://xyzabcdef.supabase.co'
-  static const String supabaseUrl = 'YOUR_SUPABASE_URL_HERE';
+  static String get supabaseUrl =>
+      dotenv.env['SUPABASE_URL'] ?? 'https://xyzabcdef.supabase.co';
 
   /// Your Supabase anon (public) key
-  static const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY_HERE';
+  static String get supabaseAnonKey =>
+      dotenv.env['SUPABASE_ANON_KEY'] ?? 'your-supabase-anon-key-here';
 }

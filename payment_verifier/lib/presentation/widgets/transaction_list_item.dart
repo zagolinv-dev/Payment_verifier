@@ -1,11 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/core/utils/formatters.dart';
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 import 'package:payment_verifier/presentation/widgets/status_chip.dart';
+import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
 
-/// Transaction list item card
 class TransactionListItem extends StatelessWidget {
   const TransactionListItem({
     super.key,
@@ -18,31 +19,36 @@ class TransactionListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? AppTheme.bgCard : AppTheme.lightCard;
+    final border = isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle;
+    final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final textTertiary = isDark ? AppTheme.textTertiary : AppTheme.lightTextTertiary;
+    final iconBg = isDark ? AppTheme.primaryGreenDark : AppTheme.primaryGreen.withOpacity(0.1);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppTheme.bgCard,
+          color: bg,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.borderSubtle),
+          border: Border.all(color: border),
         ),
         child: Row(
           children: [
-            // Bank Icon
             Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: AppTheme.primaryGreenDark,
+                color: iconBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
                 child: Text(
-                  transaction.bankName.isNotEmpty
-                      ? transaction.bankName[0]
-                      : 'B',
+                  transaction.bankName.isNotEmpty ? transaction.bankName[0] : 'B',
                   style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -52,21 +58,30 @@ class TransactionListItem extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
+                      if (transaction.receiptImage != null) ...[
+                        GestureDetector(
+                          onTap: () => _showReceipt(context),
+                          child: Container(
+                            width: 28, height: 28,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryGreen.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.image_rounded, color: AppTheme.primaryGreen, size: 16),
+                          ),
+                        ),
+                      ],
                       Expanded(
                         child: Text(
                           transaction.buyerName,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
+                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -79,26 +94,15 @@ class TransactionListItem extends StatelessWidget {
                       Flexible(
                         child: Text(
                           transaction.bankName,
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: AppTheme.textSecondary,
-                          ),
+                          style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text(
-                        ' · ',
-                        style: GoogleFonts.inter(
-                            fontSize: 12, color: AppTheme.textTertiary),
-                      ),
+                      Text(' · ', style: GoogleFonts.inter(fontSize: 12, color: textTertiary)),
                       Flexible(
                         child: Text(
                           transaction.referenceCode,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textTertiary,
-                            fontFamily: 'monospace',
-                          ),
+                          style: TextStyle(fontSize: 12, color: textTertiary, fontFamily: 'monospace'),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -109,27 +113,62 @@ class TransactionListItem extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Amount
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
                   AppFormatters.formatETB(transaction.amount),
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                  ),
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: textPrimary),
                 ),
                 if (transaction.tip > 0)
                   Text(
                     '+${AppFormatters.formatETB(transaction.tip)} tip',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: AppTheme.accentGold,
-                    ),
+                    style: GoogleFonts.inter(fontSize: 11, color: AppTheme.accentGold),
                   ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showReceipt(BuildContext context) {
+    if (transaction.receiptImage == null) return;
+    showBlurredDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.file(
+                File(transaction.receiptImage!),
+                fit: BoxFit.contain,
+                width: double.infinity,
+                height: 400,
+                errorBuilder: (_, __, ___) => Container(
+                  height: 200,
+                  color: AppTheme.bgCard,
+                  child: const Center(
+                    child: Icon(Icons.broken_image_rounded, color: AppTheme.textTertiary, size: 48),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('Close', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppTheme.bgDark)),
+              ),
             ),
           ],
         ),

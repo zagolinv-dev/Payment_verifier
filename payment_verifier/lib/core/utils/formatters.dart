@@ -1,6 +1,6 @@
 import 'package:intl/intl.dart';
 
-/// T's Pay — Currency & Date Formatters
+/// T's Verify — Currency & Date Formatters
 class AppFormatters {
   AppFormatters._();
 

@@ -8,10 +8,12 @@ import 'package:payment_verifier/presentation/screens/dashboard/dashboard_screen
 import 'package:payment_verifier/presentation/screens/home/home_shell.dart';
 import 'package:payment_verifier/presentation/screens/manage_users/manage_users_screen.dart';
 import 'package:payment_verifier/presentation/screens/onboarding/onboarding_screen.dart';
+import 'package:payment_verifier/presentation/screens/reports/reports_screen.dart';
+import 'package:payment_verifier/presentation/screens/notifications/notifications_screen.dart';
+import 'package:payment_verifier/presentation/screens/settings/settings_screen.dart';
 import 'package:payment_verifier/presentation/screens/splash/splash_screen.dart';
 import 'package:payment_verifier/presentation/screens/transactions/transactions_screen.dart';
 import 'package:payment_verifier/presentation/screens/verify_payment/verify_payment_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 // Route Names
 class AppRoutes {
@@ -24,6 +26,9 @@ class AppRoutes {
   static const transactions = '/home/transactions';
   static const bankAccounts = '/home/bank-accounts';
   static const manageUsers = '/home/manage-users';
+  static const reports = '/home/reports';
+  static const notifications = '/home/notifications';
+  static const settings = '/home/settings';
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -47,7 +52,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (isSplash || isOnboarding) return null;
 
       if (user == null && !isAuth) return AppRoutes.auth;
-      if (user != null && isAuth) return AppRoutes.home;
+      if (user != null && isAuth) return AppRoutes.dashboard;
 
       return null;
     },
@@ -92,6 +97,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: AppRoutes.manageUsers,
             parentNavigatorKey: _shellNavigatorKey,
             builder: (context, state) => const ManageUsersScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.reports,
+            parentNavigatorKey: _shellNavigatorKey,
+            builder: (context, state) => const ReportsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.settings,
+            parentNavigatorKey: _shellNavigatorKey,
+            builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.notifications,
+            parentNavigatorKey: _shellNavigatorKey,
+            builder: (context, state) => const NotificationsScreen(),
           ),
         ],
       ),

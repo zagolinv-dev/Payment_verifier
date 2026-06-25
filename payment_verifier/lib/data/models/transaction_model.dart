@@ -11,7 +11,11 @@ class TransactionModel extends TransactionEntity {
     super.tip,
     required super.status,
     super.verifiedBy,
+    super.receiptImage,
     required super.createdAt,
+    super.riskScore = 0.0,
+    super.riskFlags = const [],
+    super.orderTotal = 0.0,
   });
 
   factory TransactionModel.fromJson(Map<String, dynamic> json) {
@@ -24,7 +28,11 @@ class TransactionModel extends TransactionEntity {
       tip: (json['tip'] as num?)?.toDouble() ?? 0.0,
       status: TransactionStatus.fromString(json['status'] as String? ?? 'PENDING'),
       verifiedBy: json['verified_by'] as String?,
+      receiptImage: json['receipt_image'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
+      riskScore: (json['risk_score'] as num?)?.toDouble() ?? 0.0,
+      riskFlags: (json['risk_flags'] as List<dynamic>?)?.cast<String>() ?? [],
+      orderTotal: (json['order_total'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -37,6 +45,10 @@ class TransactionModel extends TransactionEntity {
       'tip': tip,
       'status': status.value,
       'verified_by': verifiedBy,
+      'receipt_image': receiptImage,
+      'risk_score': riskScore,
+      'risk_flags': riskFlags,
+      'order_total': orderTotal,
     };
   }
 }

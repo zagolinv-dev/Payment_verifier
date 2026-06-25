@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Reusable styled text field
+/// Reusable styled text field — theme-aware
 class AppTextField extends StatelessWidget {
   const AppTextField({
     super.key,
@@ -37,16 +37,16 @@ class AppTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final labelColor = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: AppTheme.textSecondary,
-          ),
+          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: labelColor),
         ),
         const SizedBox(height: 8),
         TextFormField(
@@ -59,10 +59,7 @@ class AppTextField extends StatelessWidget {
           enabled: enabled,
           textInputAction: textInputAction,
           onFieldSubmitted: onFieldSubmitted,
-          style: GoogleFonts.inter(
-            fontSize: 15,
-            color: AppTheme.textPrimary,
-          ),
+          style: GoogleFonts.inter(fontSize: 15, color: textColor),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: prefixIcon,

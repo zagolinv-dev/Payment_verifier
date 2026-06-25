@@ -5,8 +5,10 @@ import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/domain/entities/bank_account_entity.dart';
 import 'package:payment_verifier/presentation/providers/bank_account_provider.dart';
+import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/widgets/custom_text_field.dart';
 import 'package:payment_verifier/presentation/widgets/gradient_button.dart';
+import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
 
 class BankAccountsScreen extends ConsumerWidget {
   const BankAccountsScreen({super.key});
@@ -14,9 +16,18 @@ class BankAccountsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final accountsAsync = ref.watch(bankAccountsProvider);
+    final themeMode = ref.watch(themeProvider);
+    final isDark = themeMode == ThemeMode.dark;
+
+    final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
+    final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
+    final borderColor = isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle;
+    final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final textTertiary = isDark ? AppTheme.textTertiary : AppTheme.lightTextTertiary;
 
     return Scaffold(
-      backgroundColor: AppTheme.bgDark,
+      backgroundColor: bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -29,111 +40,68 @@ class BankAccountsScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Bank Accounts',
-                          style: GoogleFonts.outfit(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
+                        Text('Bank Accounts', style: GoogleFonts.outfit(fontSize: 26, fontWeight: FontWeight.w700, color: textPrimary)),
                         const SizedBox(height: 4),
-                        Text(
-                          'Settlement wallets & collection accounts',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
+                        Text('Settlement wallets & collection accounts', style: GoogleFonts.inter(fontSize: 13, color: textSecondary)),
                       ],
                     ),
                   ),
-                  // Add button
                   GestureDetector(
                     onTap: () => _showAddModal(context, ref),
                     child: Container(
-                      width: 44,
-                      height: 44,
+                      width: 44, height: 44,
                       decoration: BoxDecoration(
                         gradient: AppTheme.primaryGradient,
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryGreen.withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                        boxShadow: [BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
                       ),
-                      child: const Icon(Icons.add_rounded,
-                          color: AppTheme.textOnPrimary, size: 24),
+                      child: const Icon(Icons.add_rounded, color: AppTheme.textOnPrimary, size: 24),
                     ),
                   ),
                 ],
               ),
             ),
 
-            // List
             Expanded(
               child: RefreshIndicator(
                 color: AppTheme.primaryGreen,
-                backgroundColor: AppTheme.bgCard,
+                backgroundColor: card,
                 onRefresh: () async => ref.invalidate(bankAccountsProvider),
                 child: accountsAsync.when(
                   data: (accounts) => accounts.isEmpty
-                      ? ListView(
-                          children: [
-                            const SizedBox(height: 80),
-                            Center(
-                              child: Column(
-                                children: [
-                                  Icon(Icons.account_balance_outlined,
-                                      size: 60,
-                                      color: AppTheme.textTertiary
-                                          .withOpacity(0.4)),
-                                  const SizedBox(height: 16),
-                                  Text('No accounts added',
-                                      style: GoogleFonts.outfit(
-                                          fontSize: 16,
-                                          color: AppTheme.textSecondary)),
-                                  const SizedBox(height: 8),
-                                  Text('Tap + to add a bank account',
-                                      style: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          color: AppTheme.textTertiary)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        )
+                      ? ListView(children: [
+                          const SizedBox(height: 80),
+                          Center(child: Column(children: [
+                            Icon(Icons.account_balance_outlined, size: 60, color: textTertiary.withOpacity(0.4)),
+                            const SizedBox(height: 16),
+                            Text('No accounts added', style: GoogleFonts.outfit(fontSize: 16, color: textSecondary)),
+                            const SizedBox(height: 8),
+                            Text('Tap + to add a bank account', style: GoogleFonts.inter(fontSize: 13, color: textTertiary)),
+                          ])),
+                        ])
                       : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(context).padding.bottom + 100),
                           itemCount: accounts.length,
                           itemBuilder: (ctx, i) => _BankAccountCard(
                             account: accounts[i],
+                            isDark: isDark,
+                            card: card,
+                            borderColor: borderColor,
+                            textPrimary: textPrimary,
+                            textSecondary: textSecondary,
+                            textTertiary: textTertiary,
                             onToggle: (val) async {
-                              await ref
-                                  .read(bankAccountNotifierProvider.notifier)
-                                  .toggleActive(accounts[i].id, val);
+                              await ref.read(bankAccountNotifierProvider.notifier).toggleActive(accounts[i].id, val);
                               ref.invalidate(bankAccountsProvider);
                             },
                             onDelete: () async {
-                              await ref
-                                  .read(bankAccountNotifierProvider.notifier)
-                                  .deleteAccount(accounts[i].id);
+                              await ref.read(bankAccountNotifierProvider.notifier).deleteAccount(accounts[i].id);
                               ref.invalidate(bankAccountsProvider);
                             },
                           ),
                         ),
-                  loading: () => const Center(
-                    child: CircularProgressIndicator(
-                        color: AppTheme.primaryGreen),
-                  ),
-                  error: (e, _) => Center(
-                    child: Text('Error loading accounts',
-                        style: GoogleFonts.inter(
-                            color: AppTheme.textSecondary)),
-                  ),
+                  loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
+                  error: (e, _) => Center(child: Text('Error loading accounts', style: GoogleFonts.inter(color: textSecondary))),
                 ),
               ),
             ),
@@ -144,10 +112,8 @@ class BankAccountsScreen extends ConsumerWidget {
   }
 
   void _showAddModal(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
+    showBlurredBottomSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => _AddBankAccountModal(
         onSubmit: (data) async {
           final success = await ref
@@ -175,11 +141,19 @@ class _BankAccountCard extends StatelessWidget {
     required this.account,
     required this.onToggle,
     required this.onDelete,
+    required this.isDark,
+    required this.card,
+    required this.borderColor,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textTertiary,
   });
 
   final BankAccountEntity account;
   final void Function(bool) onToggle;
   final VoidCallback onDelete;
+  final bool isDark;
+  final Color card, borderColor, textPrimary, textSecondary, textTertiary;
 
   @override
   Widget build(BuildContext context) {
@@ -187,13 +161,9 @@ class _BankAccountCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.bgCard,
+        color: card,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: account.isActive
-              ? AppTheme.primaryGreen.withOpacity(0.2)
-              : AppTheme.borderSubtle,
-        ),
+        border: Border.all(color: account.isActive ? AppTheme.primaryGreen.withOpacity(0.2) : borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,22 +194,9 @@ class _BankAccountCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      account.holderName,
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
+                    Text(account.holderName, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary)),
                     const SizedBox(height: 2),
-                    Text(
-                      account.bankName,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
+                    Text(account.bankName, style: GoogleFonts.inter(fontSize: 12, color: textSecondary)),
                   ],
                 ),
               ),
@@ -256,41 +213,22 @@ class _BankAccountCard extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(color: AppTheme.borderSubtle, height: 1),
           const SizedBox(height: 12),
-          // Account number
           Row(
             children: [
-              Icon(Icons.credit_card_rounded,
-                  size: 15, color: AppTheme.textTertiary),
+              Icon(Icons.credit_card_rounded, size: 15, color: textTertiary),
               const SizedBox(width: 6),
-              Text(
-                _maskAccount(account.accountNumber),
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                  letterSpacing: 1,
-                ),
-              ),
+              Text(_maskAccount(account.accountNumber), style: GoogleFonts.inter(fontSize: 13, color: textSecondary, letterSpacing: 1)),
               const Spacer(),
               if (account.phone != null) ...[
-                Icon(Icons.phone_outlined, size: 13, color: AppTheme.textTertiary),
+                Icon(Icons.phone_outlined, size: 13, color: textTertiary),
                 const SizedBox(width: 4),
-                Text(
-                  account.phone!,
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppTheme.textSecondary),
-                ),
+                Text(account.phone!, style: GoogleFonts.inter(fontSize: 12, color: textSecondary)),
               ],
             ],
           ),
           if (account.notes != null && account.notes!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              account.notes!,
-              style: GoogleFonts.inter(
-                  fontSize: 12, color: AppTheme.textTertiary),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+            Text(account.notes!, style: GoogleFonts.inter(fontSize: 12, color: textTertiary), maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
           const SizedBox(height: 12),
           // Status + delete
@@ -341,19 +279,25 @@ class _BankAccountCard extends StatelessWidget {
   }
 
   void _confirmDelete(BuildContext context) {
-    showDialog(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
+    final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
+    showBlurredDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
+        backgroundColor: card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Delete Account?',
-            style: GoogleFonts.outfit(color: AppTheme.textPrimary)),
+            style: GoogleFonts.outfit(color: textPrimary)),
         content: Text('This action cannot be undone.',
-            style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+            style: GoogleFonts.inter(color: textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('Cancel',
-                style: GoogleFonts.inter(color: AppTheme.textSecondary)),
+                style: GoogleFonts.inter(color: textSecondary)),
           ),
           TextButton(
             onPressed: () {
@@ -417,12 +361,21 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? AppTheme.bgSurface : AppTheme.lightSurface;
+    final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final textTertiary = isDark ? AppTheme.textTertiary : AppTheme.lightTextTertiary;
+    final inputBg = isDark ? AppTheme.bgInput : AppTheme.lightInput;
+    final border = isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle;
+    final dropdownBg = isDark ? AppTheme.bgCard : AppTheme.lightCard;
+
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom),
-      decoration: const BoxDecoration(
-        color: AppTheme.bgSurface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SingleChildScrollView(
         child: Form(
@@ -436,7 +389,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppTheme.borderMedium,
+                    color: border,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -447,7 +400,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                 style: GoogleFonts.outfit(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
+                  color: textPrimary,
                 ),
               ),
               const SizedBox(height: 24),
@@ -458,7 +411,6 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                 validator: (v) => v?.isEmpty == true ? 'Required' : null,
               ),
               const SizedBox(height: 16),
-              // Bank dropdown
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -466,23 +418,23 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                       style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: AppTheme.textSecondary)),
+                          color: textSecondary)),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.bgInput,
+                      color: inputBg,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppTheme.borderSubtle),
+                      border: Border.all(color: border),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _selectedBank,
                         hint: Text('Select bank',
                             style: GoogleFonts.inter(
-                                color: AppTheme.textTertiary, fontSize: 14)),
+                                color: textTertiary, fontSize: 14)),
                         isExpanded: true,
-                        dropdownColor: AppTheme.bgCard,
+                        dropdownColor: dropdownBg,
                         icon: const Icon(Icons.keyboard_arrow_down_rounded,
                             color: AppTheme.textSecondary),
                         items: BankName.values
@@ -490,7 +442,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                                   value: b.displayName,
                                   child: Text(b.displayName,
                                       style: GoogleFonts.inter(
-                                          color: AppTheme.textPrimary,
+                                          color: textPrimary,
                                           fontSize: 14)),
                                 ))
                             .toList(),

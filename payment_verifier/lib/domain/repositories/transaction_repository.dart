@@ -1,5 +1,4 @@
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
-import 'package:payment_verifier/core/constants/app_constants.dart';
 
 abstract class TransactionRepository {
   /// Fetch all transactions (Admin) or own transactions (Waitress)
@@ -20,6 +19,10 @@ abstract class TransactionRepository {
     required double amount,
     double tip = 0.0,
     String? imageUrl,
+    double riskScore = 0.0,
+    List<String> riskFlags = const [],
+    double orderTotal = 0.0,
+    String status = 'VERIFIED',
   });
 
   /// Get aggregated dashboard metrics

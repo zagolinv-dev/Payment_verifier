@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:payment_verifier/core/constants/supabase_constants.dart';
 import 'package:payment_verifier/core/router/app_router.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
+import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load .env file
+  await dotenv.load(fileName: '.env');
 
   // Lock to portrait
   await SystemChrome.setPreferredOrientations([
@@ -15,15 +20,8 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Transparent status bar
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: AppTheme.bgDark,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
+  // Default dark system UI until theme provider kicks in
+  SystemChrome.setSystemUIOverlayStyle(AppTheme.darkOverlay);
 
   // Initialize Supabase
   try {
@@ -48,11 +46,14 @@ class TsPayApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final themeMode = ref.watch(themeProvider);
 
     return MaterialApp.router(
-      title: "T's Pay",
+      title: "T's Verify",
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
       routerConfig: router,
     );
   }

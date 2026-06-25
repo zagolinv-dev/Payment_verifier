@@ -30,12 +30,21 @@ class TransactionRepositoryImpl implements TransactionRepository {
     required double amount,
     double tip = 0.0,
     String? imageUrl,
+    double riskScore = 0.0,
+    List<String> riskFlags = const [],
+    double orderTotal = 0.0,
+    String status = 'VERIFIED',
   }) => _datasource.createTransaction(
         bankName: bankName,
         referenceCode: referenceCode,
         buyerName: buyerName,
         amount: amount,
         tip: tip,
+        imageUrl: imageUrl,
+        riskScore: riskScore,
+        riskFlags: riskFlags,
+        orderTotal: orderTotal,
+        status: status,
       );
 
   @override

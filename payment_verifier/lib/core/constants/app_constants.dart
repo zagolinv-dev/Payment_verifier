@@ -1,11 +1,11 @@
-/// T's Pay — Application-wide Constants
+/// T's Verify — Application-wide Constants
 library;
 
 class AppConstants {
   AppConstants._();
 
   // App Info
-  static const String appName = "T's Pay";
+  static const String appName = "T's Verify";
   static const String appTagline = 'Ethiopian Payments Simplified';
   static const String appVersion = '1.0.0';
 
@@ -41,12 +41,16 @@ enum BankName {
 }
 
 enum TransactionStatus {
-  pending('PENDING'),
-  verified('VERIFIED'),
-  failed('FAILED');
+  pending('PENDING', 'Pending'),
+  verified('VERIFIED', 'Verified'),
+  failed('FAILED', 'Failed'),
+  needsReview('NEEDS_REVIEW', 'Needs Review'),
+  duplicate('DUPLICATE', 'Duplicate'),
+  fraudSuspected('FRAUD_SUSPECTED', 'Fraud Suspected');
 
-  const TransactionStatus(this.value);
+  const TransactionStatus(this.value, this.label);
   final String value;
+  final String label;
 
   static TransactionStatus fromString(String value) {
     return TransactionStatus.values.firstWhere(

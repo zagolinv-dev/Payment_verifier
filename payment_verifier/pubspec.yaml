@@ -29,6 +29,9 @@ dependencies:
   image_picker: ^1.1.2
   cached_network_image: ^3.4.1
 
+  # OCR
+  google_mlkit_text_recognition: ^0.14.0
+
   # Utilities
   intl: ^0.19.0
   shared_preferences: ^2.3.4
@@ -38,12 +41,34 @@ dependencies:
   # Charts
   fl_chart: ^0.69.0
 
+  # PDF Generation
+  pdf: ^3.11.1
+  printing: ^5.13.4
+
+  # Environment
+  flutter_dotenv: ^5.2.1
+
+  # Animations
+  lottie: ^3.3.1
+
+  # Connectivity
+  connectivity_plus: ^6.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   riverpod_generator: ^2.4.3
   build_runner: ^2.4.13
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/T_s_verify_logo.png"
+  adaptive_icon_background: "#0F4A35"
+  adaptive_icon_foreground: "assets/images/icon_foreground.png"
+  remove_alpha_ios: true
 
 flutter:
   uses-material-design: true
@@ -51,3 +76,4 @@ flutter:
   assets:
     - assets/images/
     - assets/animations/
+    - .env

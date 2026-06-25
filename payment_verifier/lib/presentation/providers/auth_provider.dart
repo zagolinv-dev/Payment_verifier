@@ -3,8 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:payment_verifier/data/datasources/supabase_auth_datasource.dart';
 import 'package:payment_verifier/data/repositories/auth_repository_impl.dart';
 import 'package:payment_verifier/domain/entities/user_profile_entity.dart';
-import 'package:payment_verifier/core/constants/app_constants.dart';
-import 'package:payment_verifier/core/utils/mock_data.dart';
+
 
 // ── Supabase Client Provider ──────────────────────────────────────────────────
 
@@ -30,23 +29,25 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserProfileEntity?>> {
   }
 
   final AuthRepositoryImpl _repo;
-  static UserProfileEntity? _currentUser;
 
   Future<void> _init() async {
-    state = AsyncValue.data(_currentUser);
+    state = const AsyncValue.loading();
+    try {
+      final user = await _repo.getCurrentUser();
+      state = AsyncValue.data(user);
+    } catch (e, st) {
+      state = AsyncValue.data(null);
+    }
   }
 
-  Future<void> signIn({required String email, required String password}) async {
+  Future<void> signIn({required String email, required String password, String role = 'Manager'}) async {
     state = const AsyncValue.loading();
-    await Future.delayed(const Duration(milliseconds: 600));
-    _currentUser = UserProfileEntity(
-      id: 'mock-admin-id',
-      email: email.isNotEmpty ? email : 'simonnjege@gmail.com',
-      fullName: 'Simon Njege',
-      role: UserRole.admin,
-      createdAt: DateTime.now(),
-    );
-    state = AsyncValue.data(_currentUser);
+    try {
+      final user = await _repo.signIn(email: email, password: password);
+      state = AsyncValue.data(user);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
   }
 
   Future<void> signUp({
@@ -55,19 +56,18 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserProfileEntity?>> {
     String? fullName,
   }) async {
     state = const AsyncValue.loading();
-    await Future.delayed(const Duration(milliseconds: 600));
-    _currentUser = UserProfileEntity(
-      id: 'mock-admin-id',
-      email: email.isNotEmpty ? email : 'simonnjege@gmail.com',
-      fullName: fullName?.isNotEmpty == true ? fullName : 'Simon Njege',
-      role: UserRole.admin,
-      createdAt: DateTime.now(),
-    );
-    state = AsyncValue.data(_currentUser);
+    try {
+      final user = await _repo.signUp(email: email, password: password, fullName: fullName);
+      state = AsyncValue.data(user);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
   }
 
   Future<void> signOut() async {
-    _currentUser = null;
+    try {
+      await _repo.signOut();
+    } catch (_) {}
     state = const AsyncValue.data(null);
   }
 
