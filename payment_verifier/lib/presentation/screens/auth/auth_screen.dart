@@ -126,7 +126,40 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     if (!_managerFormKey.currentState!.validate()) return;
 
     setState(() => _isLoadingSignUp = true);
-
+    try {
+      final auth = ref.read(authProvider.notifier);
+      await auth.signUp(
+        email: _managerEmailController.text.trim(),
+        password: _managerPasswordController.text,
+        fullName: _cafeNameController.text.trim(),
+      );
+      if (!mounted) return;
+      final authState = ref.read(authProvider);
+      if (authState.hasError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppTheme.error,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: Text(authState.error.toString().replaceAll('Exception:', '').trim(), style: GoogleFonts.inter(color: Colors.white, fontSize: 14)),
+          ),
+        );
+        setState(() => _isLoadingSignUp = false);
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.error,
+          content: Text('Sign up failed: $e', style: GoogleFonts.inter(color: Colors.white)),
+        ),
+      );
+      setState(() => _isLoadingSignUp = false);
+      return;
+    }
+    if (!mounted) return;
     setState(() => _isLoadingSignUp = false);
     _changeStep(_AuthStep.managerPending);
   }
@@ -928,14 +961,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         ),
         const SizedBox(height: 24),
         ElevatedButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Simulated contacting your café manager...'),
-                backgroundColor: AppTheme.primaryGreen,
-              ),
-            );
-          },
+          onPressed: () {},
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white.withOpacity(0.05),
             foregroundColor: Colors.white,

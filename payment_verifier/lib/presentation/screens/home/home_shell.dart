@@ -6,7 +6,7 @@ import 'package:payment_verifier/core/router/app_router.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
-import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
+import 'package:payment_verifier/presentation/providers/notification_provider.dart';
 import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
 import 'package:payment_verifier/presentation/widgets/connectivity_banner.dart';
 
@@ -114,7 +114,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               padding: const EdgeInsets.only(right: 12),
               child: _NotificationBell(
                 isDark: isDark,
-                unreadCount: ref.watch(unreadCountProvider),
+                unreadCount: ref.watch(unreadCountProvider).valueOrNull ?? 0,
                 onTap: () => context.go(AppRoutes.notifications),
               ),
             ),

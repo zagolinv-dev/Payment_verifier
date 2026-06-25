@@ -17,6 +17,7 @@ class AppConstants {
   static const String profilesTable = 'profiles';
   static const String transactionsTable = 'transactions';
   static const String bankAccountsTable = 'bank_accounts';
+  static const String notificationsTable = 'notifications';
 
   // SharedPreferences Keys
   static const String onboardingDoneKey = 'onboarding_done';

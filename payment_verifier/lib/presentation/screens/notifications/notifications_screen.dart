@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
+import 'package:payment_verifier/domain/entities/notification_entity.dart';
+import 'package:payment_verifier/presentation/providers/notification_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
-import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notifications = ref.watch(notificationsProvider);
+    final notificationsAsync = ref.watch(notificationsProvider);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
 
@@ -23,87 +24,99 @@ class NotificationsScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: bg,
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Notifications',
-                    style: GoogleFonts.outfit(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: textPrimary,
+        child: notificationsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
+          error: (_, __) => const Center(child: Text('Failed to load notifications')),
+          data: (notifications) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Notifications',
+                      style: GoogleFonts.outfit(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: textPrimary,
+                      ),
                     ),
-                  ),
-                  if (notifications.any((n) => !n.isRead))
-                    GestureDetector(
-                      onTap: AppNotifications.markAllRead,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryGreen.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          'Mark all read',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.primaryGreen,
+                    if (notifications.any((n) => !n.isRead))
+                      GestureDetector(
+                        onTap: () async {
+                          await ref.read(markAllNotificationsReadProvider)();
+                          ref.invalidate(notificationsProvider);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryGreen.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            'Mark all read',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryGreen,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                '${notifications.length} notification${notifications.length == 1 ? '' : 's'}',
-                style: GoogleFonts.inter(fontSize: 14, color: textSecondary),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  '${notifications.length} notification${notifications.length == 1 ? '' : 's'}',
+                  style: GoogleFonts.inter(fontSize: 14, color: textSecondary),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: notifications.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.notifications_none_rounded, size: 64, color: textSecondary.withOpacity(0.4)),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No notifications',
-                            style: GoogleFonts.outfit(fontSize: 16, color: textSecondary),
-                          ),
-                        ],
+              const SizedBox(height: 16),
+              Expanded(
+                child: notifications.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.notifications_none_rounded, size: 64, color: textSecondary.withOpacity(0.4)),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No notifications',
+                              style: GoogleFonts.outfit(fontSize: 16, color: textSecondary),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                        itemCount: notifications.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final n = notifications[index];
+                          return _NotificationTile(
+                            item: n,
+                            isDark: isDark,
+                            card: card,
+                            textPrimary: textPrimary,
+                            textSecondary: textSecondary,
+                            borderColor: borderColor,
+                            onTap: () async {
+                              if (!n.isRead) {
+                                await ref.read(markNotificationReadProvider)(n.id);
+                                ref.invalidate(notificationsProvider);
+                              }
+                            },
+                          );
+                        },
                       ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                      itemCount: notifications.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final n = notifications[index];
-                        return _NotificationTile(
-                          item: n,
-                          isDark: isDark,
-                          card: card,
-                          textPrimary: textPrimary,
-                          textSecondary: textSecondary,
-                          borderColor: borderColor,
-                          onTap: () => AppNotifications.markRead(n.id),
-                        );
-                      },
-                    ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -121,16 +134,16 @@ class _NotificationTile extends StatelessWidget {
     required this.onTap,
   });
 
-  final NotificationItem item;
+  final NotificationEntity item;
   final bool isDark;
   final Color card, textPrimary, textSecondary, borderColor;
   final VoidCallback onTap;
 
   (IconData, Color) get _typeIcon {
     return switch (item.type) {
-      NotificationType.alert => (Icons.warning_amber_rounded, AppTheme.error),
-      NotificationType.warning => (Icons.info_outline_rounded, AppTheme.warning),
-      NotificationType.info => (Icons.notifications_rounded, AppTheme.pending),
+      'alert' => (Icons.warning_amber_rounded, AppTheme.error),
+      'warning' => (Icons.info_outline_rounded, AppTheme.warning),
+      _ => (Icons.notifications_rounded, AppTheme.pending),
     };
   }
 

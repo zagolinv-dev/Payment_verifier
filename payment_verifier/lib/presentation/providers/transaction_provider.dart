@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:payment_verifier/data/datasources/supabase_notification_datasource.dart';
 import 'package:payment_verifier/data/datasources/supabase_transaction_datasource.dart';
 import 'package:payment_verifier/data/repositories/transaction_repository_impl.dart';
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
@@ -250,8 +252,9 @@ FraudDetectionResult analyzeFraudRisk({
 }
 
 class VerifyNotifier extends StateNotifier<VerifyState> {
-  VerifyNotifier(this._repo) : super(const VerifyState());
+  VerifyNotifier(this._repo, this._notifDatasource) : super(const VerifyState());
   final TransactionRepositoryImpl _repo;
+  final SupabaseNotificationDatasource _notifDatasource;
 
   void setBank(String bank) => state = state.copyWith(selectedBank: bank);
   void setCode(String code) => state = state.copyWith(referenceCode: code);
@@ -263,36 +266,33 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
   }
   void setReceiptImage(String? path) => state = state.copyWith(receiptImage: path);
 
-  void simulateVerification() {
+  void runLiveCheck() {
     if (state.selectedBank == null || state.amount <= 0) return;
     final bank = BankName.values.firstWhere(
       (b) => b.displayName == state.selectedBank,
       orElse: () => BankName.cbe,
     );
-    final refCode = 'MOCK-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
-    state = state.copyWith(
-      referenceCode: refCode,
-      isVerifying: true,
-      verification: null,
-    );
+    final hasImage = state.receiptImage != null && File(state.receiptImage!).existsSync();
     final verification = ReceiptVerification(
-      ownerNameMatch: true,
+      ownerNameMatch: state.buyerName.trim().length >= 2,
       amountValid: state.amount >= state.orderTotal,
-      referenceFormatValid: PaymentValidators.validateReference(refCode, bank),
-      imageIntegrity: true,
-      ownerName: "T's Verify Cafe",
+      referenceFormatValid: state.referenceCode.isNotEmpty
+          ? PaymentValidators.validateReference(state.referenceCode, bank)
+          : false,
+      imageIntegrity: hasImage,
+      ownerName: state.buyerName,
     );
-    state = state.copyWith(
-      verification: verification,
-      isVerifying: false,
-    );
+    state = state.copyWith(verification: verification);
   }
 
   Future<void> verify({String? waiterName}) async {
+    if (state.referenceCode.isEmpty) {
+      state = state.copyWith(error: 'Reference code is required. Enter it manually or scan a valid receipt.');
+      return;
+    }
+
     final bank = state.selectedBank ?? 'Telebirr';
-    final refCode = state.referenceCode.isNotEmpty
-        ? state.referenceCode
-        : 'MOCK-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
+    final refCode = state.referenceCode;
 
     state = state.copyWith(
       isLoading: true,
@@ -326,9 +326,8 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       );
 
       if (fraudAnalysis.riskScore >= 0.3) {
-        AppNotifications.add(NotificationItem(
-          id: 'notif-${DateTime.now().millisecondsSinceEpoch}',
-          type: fraudAnalysis.riskScore >= 0.7 ? NotificationType.alert : NotificationType.warning,
+        await _notifDatasource.createNotification(
+          type: fraudAnalysis.riskScore >= 0.7 ? 'alert' : 'warning',
           title: fraudAnalysis.suggestedStatus == TransactionStatus.fraudSuspected
               ? 'Fraud Suspected'
               : fraudAnalysis.suggestedStatus == TransactionStatus.duplicate
@@ -337,8 +336,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
           message: fraudAnalysis.flags.isNotEmpty ? fraudAnalysis.flags.first : 'Transaction flagged',
           transactionId: tx.id,
           amount: state.amount,
-          createdAt: DateTime.now(),
-        ));
+        );
       }
 
       state = state.copyWith(isLoading: false, result: tx);
@@ -352,76 +350,8 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
 
 final verifyProvider =
     StateNotifierProvider.autoDispose<VerifyNotifier, VerifyState>((ref) {
-  return VerifyNotifier(ref.watch(transactionRepositoryProvider));
-});
-
-enum NotificationType { info, warning, alert }
-
-class NotificationItem {
-  final String id;
-  final NotificationType type;
-  final String title;
-  final String message;
-  final String? transactionId;
-  final double amount;
-  final DateTime createdAt;
-  final bool isRead;
-
-  const NotificationItem({
-    required this.id,
-    required this.type,
-    required this.title,
-    required this.message,
-    this.transactionId,
-    this.amount = 0,
-    required this.createdAt,
-    this.isRead = false,
-  });
-
-  NotificationItem copyWith({bool? isRead}) {
-    return NotificationItem(
-      id: id,
-      type: type,
-      title: title,
-      message: message,
-      transactionId: transactionId,
-      amount: amount,
-      createdAt: createdAt,
-      isRead: isRead ?? this.isRead,
-    );
-  }
-}
-
-class AppNotifications {
-  static final List<NotificationItem> _items = [];
-
-  static List<NotificationItem> get all => List.unmodifiable(_items);
-  static int get unreadCount => _items.where((n) => !n.isRead).length;
-
-  static void add(NotificationItem item) {
-    _items.insert(0, item);
-  }
-
-  static void markRead(String id) {
-    final idx = _items.indexWhere((n) => n.id == id);
-    if (idx >= 0) {
-      _items[idx] = _items[idx].copyWith(isRead: true);
-    }
-  }
-
-  static void markAllRead() {
-    for (var i = 0; i < _items.length; i++) {
-      _items[i] = _items[i].copyWith(isRead: true);
-    }
-  }
-
-  static void clear() => _items.clear();
-}
-
-final notificationsProvider = Provider.autoDispose<List<NotificationItem>>((ref) {
-  return AppNotifications.all;
-});
-
-final unreadCountProvider = Provider.autoDispose<int>((ref) {
-  return AppNotifications.unreadCount;
+  return VerifyNotifier(
+    ref.watch(transactionRepositoryProvider),
+    SupabaseNotificationDatasource(ref.watch(supabaseClientProvider)),
+  );
 });

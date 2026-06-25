@@ -163,7 +163,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
   void _runVerificationCheck() {
     final st = ref.read(verifyProvider);
     if (st.selectedBank != null && st.amount > 0 && _selectedImage != null) {
-      ref.read(verifyProvider.notifier).simulateVerification();
+      ref.read(verifyProvider.notifier).runLiveCheck();
     }
   }
 
