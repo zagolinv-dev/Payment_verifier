@@ -313,13 +313,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            'Ethiopian Payments Simplified',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.5),
-            ),
-          ),
         ],
       ],
     );
