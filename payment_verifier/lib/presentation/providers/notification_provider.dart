@@ -27,6 +27,16 @@ final markAllNotificationsReadProvider = Provider.autoDispose<Future<void> Funct
   return () => datasource.markAllRead();
 });
 
+final deleteNotificationProvider = Provider.autoDispose<Future<void> Function(String)>((ref) {
+  final datasource = ref.watch(notificationDatasourceProvider);
+  return (String id) => datasource.deleteNotification(id);
+});
+
+final clearAllNotificationsProvider = Provider.autoDispose<Future<void> Function()>((ref) {
+  final datasource = ref.watch(notificationDatasourceProvider);
+  return () => datasource.clearAll();
+});
+
 final createNotificationProvider = Provider.autoDispose<Future<void> Function({
   required String type,
   required String title,

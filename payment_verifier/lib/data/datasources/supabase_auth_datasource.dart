@@ -31,25 +31,55 @@ class SupabaseAuthDatasource {
     required String email,
     required String password,
     String? fullName,
+    String? phone,
+    String? ownerName,
+    String? address,
+    String? description,
   }) async {
     final response = await _client.auth.signUp(
       email: email,
       password: password,
-      data: {'full_name': fullName},
+      data: {
+        'full_name': fullName,
+        'role': 'ADMIN',
+        'phone': phone,
+        'owner_name': ownerName,
+        'address': address,
+        'description': description,
+      },
     );
     final user = response.user!;
-    // Profile is created by Supabase trigger; fetch or create it
-    try {
-      return await _fetchProfile(user.id, user.email ?? '');
-    } catch (_) {
-      await _client.from(AppConstants.profilesTable).upsert({
-        'id': user.id,
-        'email': user.email,
-        'full_name': fullName,
-        'role': 'WAITRESS',
-      });
-      return _fetchProfile(user.id, user.email ?? '');
+
+    if (response.session != null) {
+      try {
+        return await _fetchProfile(user.id, user.email ?? '');
+      } catch (_) {
+        await _client.from(AppConstants.profilesTable).upsert({
+          'id': user.id,
+          'email': user.email,
+          'full_name': fullName,
+          'role': 'ADMIN',
+          'status': 'PENDING',
+          'phone': phone,
+          'owner_name': ownerName,
+          'address': address,
+          'description': description,
+        });
+        return _fetchProfile(user.id, user.email ?? '');
+      }
     }
+
+    return UserProfileModel(
+      id: user.id,
+      email: user.email ?? email,
+      fullName: fullName,
+      role: UserRole.admin,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  Future<void> resetPassword(String email) async {
+    await _client.auth.resetPasswordForEmail(email);
   }
 
   Future<void> signOut() async {

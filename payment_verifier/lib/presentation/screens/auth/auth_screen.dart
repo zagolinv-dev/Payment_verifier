@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:payment_verifier/core/router/app_router.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
+import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/widgets/custom_text_field.dart';
 import 'package:payment_verifier/presentation/widgets/gradient_button.dart';
@@ -38,26 +40,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
 
   final _managerFormKey = GlobalKey<FormState>();
   final _cafeNameController = TextEditingController();
+  final _ownerNameController = TextEditingController();
   final _managerPhoneController = TextEditingController();
-  final _managerCityController = TextEditingController();
-  final _managerEmailController = TextEditingController();
-  final _managerPasswordController = TextEditingController();
-  final _managerConfirmPasswordController = TextEditingController();
+  final _managerAddressController = TextEditingController();
   final _managerDescController = TextEditingController();
 
-  String _selectedCategory = 'Food & Beverage';
-  final List<String> _categories = [
-    'Food & Beverage',
-    'Retail / Supermarket',
-    'Hotel & Lodging',
-    'Entertainment',
-    'Other'
-  ];
+  final _forgotEmailController = TextEditingController();
+  final _forgotNameController = TextEditingController();
+  String _forgotRole = 'Manager';
 
   bool _obscureSignInPassword = true;
-  bool _obscureManagerPassword = true;
-  bool _obscureManagerConfirmPassword = true;
   bool _isLoadingSignUp = false;
+  bool _isLoadingForgot = false;
 
   late final AnimationController _bgAnimController;
 
@@ -75,12 +69,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     _signInEmailController.dispose();
     _signInPasswordController.dispose();
     _cafeNameController.dispose();
+    _ownerNameController.dispose();
     _managerPhoneController.dispose();
-    _managerCityController.dispose();
-    _managerEmailController.dispose();
-    _managerPasswordController.dispose();
-    _managerConfirmPasswordController.dispose();
+    _managerAddressController.dispose();
     _managerDescController.dispose();
+    _forgotEmailController.dispose();
+    _forgotNameController.dispose();
     _bgAnimController.dispose();
     super.dispose();
   }
@@ -127,33 +121,52 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
 
     setState(() => _isLoadingSignUp = true);
     try {
-      final auth = ref.read(authProvider.notifier);
-      await auth.signUp(
-        email: _managerEmailController.text.trim(),
-        password: _managerPasswordController.text,
-        fullName: _cafeNameController.text.trim(),
-      );
+      final supabase = ref.read(supabaseClientProvider);
+      await supabase.from(AppConstants.profilesTable).insert({
+        'id': _generateUuid(),
+        'full_name': _cafeNameController.text.trim(),
+        'owner_name': _ownerNameController.text.trim(),
+        'phone': _managerPhoneController.text.trim(),
+        'address': _managerAddressController.text.trim(),
+        'description': _managerDescController.text.trim(),
+        'role': 'ADMIN',
+        'status': 'PENDING',
+      });
+    } on PostgrestException catch (e) {
       if (!mounted) return;
-      final authState = ref.read(authProvider);
-      if (authState.hasError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppTheme.error,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            content: Text(authState.error.toString().replaceAll('Exception:', '').trim(), style: GoogleFonts.inter(color: Colors.white, fontSize: 14)),
-          ),
-        );
-        setState(() => _isLoadingSignUp = false);
-        return;
+      debugPrint('[SignUp DB Error] code=${e.code} message=${e.message} details=${e.details} hint=${e.hint}');
+      String msg;
+      if (e.code == '42501') {
+        msg = 'Permission denied. Please check your connection.';
+      } else if (e.code == '23505') {
+        msg = 'This application was already submitted.';
+      } else if (e.message != null && e.message!.isNotEmpty) {
+        msg = 'Database error: ${e.message}';
+      } else {
+        msg = 'Something went wrong. Please try again.';
       }
-    } catch (e) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: AppTheme.error,
-          content: Text('Sign up failed: $e', style: GoogleFonts.inter(color: Colors.white)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Text(msg, style: GoogleFonts.inter(color: Colors.white, fontSize: 14)),
+        ),
+      );
+      setState(() => _isLoadingSignUp = false);
+      return;
+    } catch (e) {
+      if (!mounted) return;
+      debugPrint('[SignUp Error] $e');
+      final msg = e.toString().contains('SocketException') || e.toString().contains('HandshakeException')
+          ? 'No internet connection. Please check your network.'
+          : e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.error,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Text(msg, style: GoogleFonts.inter(color: Colors.white, fontSize: 14)),
         ),
       );
       setState(() => _isLoadingSignUp = false);
@@ -162,6 +175,19 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     if (!mounted) return;
     setState(() => _isLoadingSignUp = false);
     _changeStep(_AuthStep.managerPending);
+  }
+
+  String _generateUuid() {
+    final r = math.Random();
+    return '${_hex(r, 8)}-${_hex(r, 4)}-4${_hex(r, 3)}-${_hex(r, 4)}-${_hex(r, 12)}';
+  }
+
+  String _hex(math.Random r, int digits) {
+    final chars = <int>[];
+    for (int i = 0; i < digits; i++) {
+      chars.add(r.nextInt(16).toRadixString(16).codeUnitAt(0));
+    }
+    return String.fromCharCodes(chars);
   }
 
   @override
@@ -224,59 +250,69 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
           ),
 
           SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 24),
-                    
-                    // Wizard Card
-                    Container(
-                      constraints: const BoxConstraints(maxWidth: 460),
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0E1A12).withOpacity(0.94),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.06),
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.4),
-                            blurRadius: 32,
-                            offset: const Offset(0, 12),
+            child: Column(
+              children: [
+                // Header with logo + "T's Verify" on the green area
+                Padding(
+                  padding: const EdgeInsets.only(top: 24, bottom: 4),
+                  child: _buildHeader(),
+                ),
+                // Scrollable form area
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 8),
+                          // Wizard Card
+                          Container(
+                            constraints: const BoxConstraints(maxWidth: 460),
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0E1A12).withOpacity(0.94),
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.06),
+                                width: 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.4),
+                                  blurRadius: 32,
+                                  offset: const Offset(0, 12),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(28),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              transitionBuilder: (child, anim) {
+                                return FadeTransition(
+                                  opacity: anim,
+                                  child: SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0, 0.05),
+                                      end: Offset.zero,
+                                    ).animate(CurvedAnimation(
+                                      parent: anim,
+                                      curve: Curves.easeOutCubic,
+                                    )),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: _buildCurrentStep(isSignInLoading || _isLoadingSignUp),
+                            ),
                           ),
                         ],
                       ),
-                      padding: const EdgeInsets.all(28),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        transitionBuilder: (child, anim) {
-                          return FadeTransition(
-                            opacity: anim,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, 0.05),
-                                end: Offset.zero,
-                              ).animate(CurvedAnimation(
-                                parent: anim,
-                                curve: Curves.easeOutCubic,
-                              )),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: _buildCurrentStep(isSignInLoading || _isLoadingSignUp),
-                      ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -627,7 +663,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
               ),
               const SizedBox(width: 12),
               Text(
-                'Register Café',
+                'Register Company',
                 style: GoogleFonts.outfit(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -647,10 +683,19 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
           const SizedBox(height: 20),
           
           AppTextField(
-            label: 'Business / Café Name',
+            label: 'Company Name',
             hint: 'e.g. T\'s Pay Bistro',
             controller: _cafeNameController,
             prefixIcon: const Icon(Icons.storefront_rounded, color: AppTheme.textTertiary, size: 20),
+            validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+          ),
+          const SizedBox(height: 12),
+          
+          AppTextField(
+            label: 'Owner Name',
+            hint: 'Full name of the business owner',
+            controller: _ownerNameController,
+            prefixIcon: const Icon(Icons.person_outline_rounded, color: AppTheme.textTertiary, size: 20),
             validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
           ),
           const SizedBox(height: 12),
@@ -665,123 +710,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
           ),
           const SizedBox(height: 12),
           
-          Row(
-            children: [
-              Expanded(
-                child: AppTextField(
-                  label: 'City',
-                  hint: 'e.g. Addis Ababa',
-                  controller: _managerCityController,
-                  prefixIcon: const Icon(Icons.location_on_outlined, color: AppTheme.textTertiary, size: 20),
-                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Category Selector Pills
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Café Category',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withOpacity(0.7),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _categories.map((cat) {
-                  final isSel = _selectedCategory == cat;
-                  return ChoiceChip(
-                    label: Text(cat),
-                    selected: isSel,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() => _selectedCategory = cat);
-                      }
-                    },
-                    selectedColor: AppTheme.primaryGreen.withOpacity(0.2),
-                    backgroundColor: Colors.white.withOpacity(0.04),
-                    labelStyle: GoogleFonts.inter(
-                      color: isSel ? AppTheme.primaryGreen : Colors.white.withOpacity(0.5),
-                      fontWeight: isSel ? FontWeight.w600 : FontWeight.w400,
-                      fontSize: 11,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      side: BorderSide(
-                        color: isSel ? AppTheme.primaryGreen : Colors.white.withOpacity(0.08),
-                        width: 1,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
           AppTextField(
-            label: 'Email Address',
-            hint: 'manager@example.com',
-            controller: _managerEmailController,
-            keyboardType: TextInputType.emailAddress,
-            prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.textTertiary, size: 20),
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Required';
-              if (!v.contains('@')) return 'Invalid email';
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-          
-          AppTextField(
-            label: 'Password',
-            hint: 'Min. 8 characters',
-            controller: _managerPasswordController,
-            obscureText: _obscureManagerPassword,
-            prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppTheme.textTertiary, size: 20),
-            suffixIcon: IconButton(
-              onPressed: () => setState(() => _obscureManagerPassword = !_obscureManagerPassword),
-              icon: Icon(
-                _obscureManagerPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                color: AppTheme.textTertiary,
-                size: 20,
-              ),
-            ),
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Required';
-              if (v.length < 8) return 'Min 8 characters';
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-
-          AppTextField(
-            label: 'Confirm Password',
-            hint: '••••••••',
-            controller: _managerConfirmPasswordController,
-            obscureText: _obscureManagerConfirmPassword,
-            prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppTheme.textTertiary, size: 20),
-            suffixIcon: IconButton(
-              onPressed: () => setState(() => _obscureManagerConfirmPassword = !_obscureManagerConfirmPassword),
-              icon: Icon(
-                _obscureManagerConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                color: AppTheme.textTertiary,
-                size: 20,
-              ),
-            ),
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Required';
-              if (v != _managerPasswordController.text) return 'Passwords do not match';
-              return null;
-            },
+            label: 'Address',
+            hint: 'e.g. Addis Ababa, Ethiopia',
+            controller: _managerAddressController,
+            prefixIcon: const Icon(Icons.location_on_outlined, color: AppTheme.textTertiary, size: 20),
+            validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
           ),
           const SizedBox(height: 12),
 
@@ -866,7 +800,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         ),
         const SizedBox(height: 8),
         Text(
-          'Once approved, you can sign in using your registered email and password.',
+          'Once approved, the super admin will provide your login password. You can change it after signing in.',
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(
             fontSize: 12,
@@ -980,123 +914,214 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   // ── Step 6: Forgot Password Screen ──────────────────────────────────────────
 
   Widget _buildForgotPasswordStep() {
-    return Column(
+    return Form(
       key: const ValueKey('forgotPassword'),
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            GestureDetector(
-              onTap: () => _changeStep(_AuthStep.signIn),
-              child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              'Reset Password',
-              style: GoogleFonts.outfit(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => _changeStep(_AuthStep.signIn),
+                child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 24),
               ),
+              const SizedBox(width: 12),
+              Text(
+                'Reset Password',
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Select your role to recover your credentials',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: Colors.white.withOpacity(0.5),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Role toggle
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Row(
+              children: [
+                _RoleToggleOption(
+                  label: 'Manager',
+                  icon: Icons.store_rounded,
+                  isSelected: _forgotRole == 'Manager',
+                  color: AppTheme.accentGold,
+                  onTap: () => setState(() => _forgotRole = 'Manager'),
+                ),
+                _RoleToggleOption(
+                  label: 'Waiter',
+                  icon: Icons.badge_rounded,
+                  isSelected: _forgotRole == 'Waiter',
+                  color: AppTheme.primaryGreen,
+                  onTap: () => setState(() => _forgotRole = 'Waiter'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          if (_forgotRole == 'Manager') ...[
+            Text(
+              'Enter your email and we\'ll send you a password reset link.',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 12),
+            AppTextField(
+              label: 'Email Address',
+              hint: 'manager@example.com',
+              controller: _forgotEmailController,
+              keyboardType: TextInputType.emailAddress,
+              prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.textTertiary, size: 20),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Enter your email';
+                if (!v.contains('@')) return 'Invalid email';
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            GradientButton(
+              label: 'Send Reset Link',
+              icon: Icons.send_rounded,
+              isLoading: _isLoadingForgot,
+              onPressed: _isLoadingForgot ? null : _submitManagerForgotPassword,
             ),
           ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Choose your account type to recover your credentials',
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            color: Colors.white.withOpacity(0.5),
-          ),
-        ),
-        const SizedBox(height: 24),
-        
-        // Manager Reset Card
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.03),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.06)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.store_rounded, color: AppTheme.accentGold, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'I am a Manager',
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
+
+          if (_forgotRole == 'Waiter') ...[
+            Text(
+              'Enter your name and email. Your manager will be notified to reset your password.',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.6),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Please contact support@tspay.com or message the super admin directly to request a password reset link.',
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  color: Colors.white.withOpacity(0.6),
-                  height: 1.4,
-                ),
-              ),
-            ],
+            ),
+            const SizedBox(height: 12),
+            AppTextField(
+              label: 'Your Full Name',
+              hint: 'e.g. John Doe',
+              controller: _forgotNameController,
+              prefixIcon: const Icon(Icons.person_outline_rounded, color: AppTheme.textTertiary, size: 20),
+              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            AppTextField(
+              label: 'Your Email',
+              hint: 'waiter@example.com',
+              controller: _forgotEmailController,
+              keyboardType: TextInputType.emailAddress,
+              prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.textTertiary, size: 20),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Enter your email';
+                if (!v.contains('@')) return 'Invalid email';
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            GradientButton(
+              label: 'Notify My Manager',
+              icon: Icons.notifications_outlined,
+              isLoading: _isLoadingForgot,
+              onPressed: _isLoadingForgot ? null : _submitWaiterForgotPassword,
+            ),
+          ],
+
+          const SizedBox(height: 16),
+          GradientButton(
+            label: 'Back to Sign In',
+            icon: Icons.login_rounded,
+            onPressed: () => _changeStep(_AuthStep.signIn),
+            gradient: AppTheme.primaryGradient,
           ),
-        ),
-        const SizedBox(height: 16),
-        
-        // Waiter Reset Card
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.03),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.06)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.badge_rounded, color: AppTheme.primaryGreen, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'I am a Waiter',
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Please contact your café manager. They can reset your password directly from the Team Management screen.',
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  color: Colors.white.withOpacity(0.6),
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-        
-        const SizedBox(height: 32),
-        GradientButton(
-          label: 'Back to Sign In',
-          icon: Icons.login_rounded,
-          onPressed: () => _changeStep(_AuthStep.signIn),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+
+  Future<void> _submitManagerForgotPassword() async {
+    if (_forgotEmailController.text.trim().isEmpty) return;
+    setState(() => _isLoadingForgot = true);
+    try {
+      await ref.read(authProvider.notifier).resetPassword(
+        _forgotEmailController.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.primaryGreen,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Text(
+            'Reset link sent! Check your email.',
+            style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+          ),
+        ),
+      );
+      _changeStep(_AuthStep.signIn);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.error,
+          content: Text('Failed: $e', style: GoogleFonts.inter(color: Colors.white)),
+        ),
+      );
+    }
+    setState(() => _isLoadingForgot = false);
+  }
+
+  Future<void> _submitWaiterForgotPassword() async {
+    if (_forgotNameController.text.trim().isEmpty || _forgotEmailController.text.trim().isEmpty) return;
+    setState(() => _isLoadingForgot = true);
+    try {
+      final supabase = ref.read(supabaseClientProvider);
+      await supabase.from('password_reset_requests').insert({
+        'name': _forgotNameController.text.trim(),
+        'email': _forgotEmailController.text.trim(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.primaryGreen,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Text(
+            'Request sent! Your manager will contact you.',
+            style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+          ),
+        ),
+      );
+      _changeStep(_AuthStep.signIn);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.error,
+          content: Text('Failed to send request. Please contact your manager directly.', style: GoogleFonts.inter(color: Colors.white)),
+        ),
+      );
+    }
+    setState(() => _isLoadingForgot = false);
   }
 }
 

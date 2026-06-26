@@ -54,13 +54,34 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserProfileEntity?>> {
     required String email,
     required String password,
     String? fullName,
+    String? phone,
+    String? ownerName,
+    String? address,
+    String? description,
   }) async {
     state = const AsyncValue.loading();
     try {
-      final user = await _repo.signUp(email: email, password: password, fullName: fullName);
-      state = AsyncValue.data(user);
+      await _repo.signUp(
+        email: email,
+        password: password,
+        fullName: fullName,
+        phone: phone,
+        ownerName: ownerName,
+        address: address,
+        description: description,
+      );
+      try { await _repo.signOut(); } catch (_) {}
+      state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> resetPassword(String email) async {
+    try {
+      await _repo.resetPassword(email);
+    } catch (e) {
+      rethrow;
     }
   }
 

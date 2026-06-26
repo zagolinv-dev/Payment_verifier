@@ -24,11 +24,22 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
     String? fullName,
+    String? phone,
+    String? ownerName,
+    String? address,
+    String? description,
   }) => _datasource.signUp(
         email: email,
         password: password,
         fullName: fullName,
+        phone: phone,
+        ownerName: ownerName,
+        address: address,
+        description: description,
       );
+
+  @override
+  Future<void> resetPassword(String email) => _datasource.resetPassword(email);
 
   @override
   Future<void> signOut() => _datasource.signOut();

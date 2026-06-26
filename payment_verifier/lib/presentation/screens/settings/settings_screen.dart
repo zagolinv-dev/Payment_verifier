@@ -271,71 +271,103 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
 
   showDialog(
     context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: card,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text('Change Password', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: textPrimary)),
-      content: Form(
-        key: formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: currentCtrl,
-              obscureText: true,
-              style: GoogleFonts.inter(color: textPrimary, fontSize: 14),
-              decoration: InputDecoration(labelText: 'Current Password', labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 13)),
-              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) {
+        bool obscureCurrent = true;
+        bool obscureNew = true;
+        bool obscureConfirm = true;
+
+        return AlertDialog(
+          backgroundColor: card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Change Password', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: textPrimary)),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: currentCtrl,
+                  obscureText: obscureCurrent,
+                  style: GoogleFonts.inter(color: textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Current Password',
+                    labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 13),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureCurrent ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+                      color: textSecondary,
+                      onPressed: () => setDialogState(() => obscureCurrent = !obscureCurrent),
+                    ),
+                  ),
+                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: newCtrl,
+                  obscureText: obscureNew,
+                  style: GoogleFonts.inter(color: textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'New Password',
+                    labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 13),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureNew ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+                      color: textSecondary,
+                      onPressed: () => setDialogState(() => obscureNew = !obscureNew),
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    if (v.length < 8) return 'Min 8 characters';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: confirmCtrl,
+                  obscureText: obscureConfirm,
+                  style: GoogleFonts.inter(color: textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Confirm New Password',
+                    labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 13),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureConfirm ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+                      color: textSecondary,
+                      onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    if (v != newCtrl.text) return 'Passwords do not match';
+                    return null;
+                  },
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: newCtrl,
-              obscureText: true,
-              style: GoogleFonts.inter(color: textPrimary, fontSize: 14),
-              decoration: InputDecoration(labelText: 'New Password', labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 13)),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Required';
-                if (v.length < 8) return 'Min 8 characters';
-                return null;
-              },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.inter(color: textTertiary)),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: confirmCtrl,
-              obscureText: true,
-              style: GoogleFonts.inter(color: textPrimary, fontSize: 14),
-              decoration: InputDecoration(labelText: 'Confirm New Password', labelStyle: GoogleFonts.inter(color: textSecondary, fontSize: 13)),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Required';
-                if (v != newCtrl.text) return 'Passwords do not match';
-                return null;
+            ElevatedButton(
+              onPressed: () {
+                if (!formKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Password updated successfully', style: GoogleFonts.inter(color: Colors.white)),
+                    backgroundColor: AppTheme.primaryGreen,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                );
               },
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: Text('Update', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
             ),
           ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: Text('Cancel', style: GoogleFonts.inter(color: textTertiary)),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (!formKey.currentState!.validate()) return;
-            Navigator.pop(ctx);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Password updated successfully', style: GoogleFonts.inter(color: Colors.white)),
-                backgroundColor: AppTheme.primaryGreen,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            );
-          },
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-          child: Text('Update', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-        ),
-      ],
+        );
+      },
     ),
   );
 }

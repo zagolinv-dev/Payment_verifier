@@ -15,8 +15,15 @@ create table if not exists public.profiles (
   full_name text,
   avatar_url text,
   role text check (role in ('ADMIN', 'WAITRESS')) default 'WAITRESS',
+  status text check (status in ('PENDING', 'APPROVED', 'REJECTED')) default 'APPROVED',
   created_at timestamptz default now() not null
 );
+
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'status') then
+    alter table public.profiles add column status text check (status in ('PENDING', 'APPROVED', 'REJECTED')) default 'APPROVED';
+  end if;
+end $$;
 
 -- Auto-create profile on signup
 create or replace function public.handle_new_user()
@@ -24,13 +31,17 @@ returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  v_role text;
 begin
-  insert into public.profiles (id, email, full_name, role)
+  v_role := coalesce(new.raw_user_meta_data->>'role', 'WAITRESS');
+  insert into public.profiles (id, email, full_name, role, status)
   values (
     new.id,
     new.email,
     new.raw_user_meta_data->>'full_name',
-    coalesce(new.raw_user_meta_data->>'role', 'WAITRESS')
+    v_role,
+    case when v_role = 'ADMIN' then 'PENDING' else 'APPROVED' end
   );
   return new;
 end;

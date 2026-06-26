@@ -5,6 +5,7 @@ import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/domain/entities/notification_entity.dart';
 import 'package:payment_verifier/presentation/providers/notification_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
+import 'dart:async';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -43,28 +44,67 @@ class NotificationsScreen extends ConsumerWidget {
                         color: textPrimary,
                       ),
                     ),
-                    if (notifications.any((n) => !n.isRead))
-                      GestureDetector(
-                        onTap: () async {
-                          await ref.read(markAllNotificationsReadProvider)();
-                          ref.invalidate(notificationsProvider);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryGreen.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            'Mark all read',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryGreen,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (notifications.isNotEmpty)
+                          GestureDetector(
+                            onTap: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  backgroundColor: card,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  title: Text('Clear all?', style: GoogleFonts.outfit(color: textPrimary)),
+                                  content: Text('Delete all notifications?', style: GoogleFonts.inter(color: textSecondary)),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary))),
+                                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Clear', style: GoogleFonts.inter(color: AppTheme.error, fontWeight: FontWeight.w600))),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await ref.read(clearAllNotificationsProvider)();
+                                ref.invalidate(notificationsProvider);
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: AppTheme.error.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'Clear all',
+                                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.error),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
+                        const SizedBox(width: 8),
+                        if (notifications.any((n) => !n.isRead))
+                          GestureDetector(
+                            onTap: () async {
+                              await ref.read(markAllNotificationsReadProvider)();
+                              ref.invalidate(notificationsProvider);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryGreen.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'Mark all read',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.primaryGreen,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -98,19 +138,51 @@ class NotificationsScreen extends ConsumerWidget {
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final n = notifications[index];
-                          return _NotificationTile(
-                            item: n,
-                            isDark: isDark,
-                            card: card,
-                            textPrimary: textPrimary,
-                            textSecondary: textSecondary,
-                            borderColor: borderColor,
-                            onTap: () async {
-                              if (!n.isRead) {
-                                await ref.read(markNotificationReadProvider)(n.id);
-                                ref.invalidate(notificationsProvider);
-                              }
+                          return Dismissible(
+                            key: ValueKey(n.id),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              decoration: BoxDecoration(
+                                color: AppTheme.error.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 22),
+                            ),
+                            confirmDismiss: (_) async {
+                              return await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  backgroundColor: card,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  title: Text('Delete?', style: GoogleFonts.outfit(color: textPrimary)),
+                                  content: Text('Remove this notification?', style: GoogleFonts.inter(color: textSecondary)),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary))),
+                                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Delete', style: GoogleFonts.inter(color: AppTheme.error, fontWeight: FontWeight.w600))),
+                                  ],
+                                ),
+                              );
                             },
+                            onDismissed: (_) async {
+                              await ref.read(deleteNotificationProvider)(n.id);
+                              ref.invalidate(notificationsProvider);
+                            },
+                            child: _NotificationTile(
+                              item: n,
+                              isDark: isDark,
+                              card: card,
+                              textPrimary: textPrimary,
+                              textSecondary: textSecondary,
+                              borderColor: borderColor,
+                              onTap: () async {
+                                if (!n.isRead) {
+                                  await ref.read(markNotificationReadProvider)(n.id);
+                                  ref.invalidate(notificationsProvider);
+                                }
+                              },
+                            ),
                           );
                         },
                       ),
