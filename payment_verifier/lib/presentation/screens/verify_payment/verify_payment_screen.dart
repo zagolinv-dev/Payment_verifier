@@ -9,6 +9,8 @@ import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/core/utils/formatters.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
+import 'package:payment_verifier/domain/entities/bank_account_entity.dart';
+import 'package:payment_verifier/presentation/providers/bank_account_provider.dart';
 import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
 import 'package:payment_verifier/presentation/widgets/custom_text_field.dart';
 import 'package:payment_verifier/presentation/widgets/gradient_button.dart';
@@ -71,6 +73,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
       recognizer.close();
 
       final text = recognisedText.text;
+      debugPrint('[OCR] raw text (${text.length} chars): ${text.length > 500 ? "${text.substring(0, 500)}..." : text}');
       if (text.isEmpty) {
         setState(() => _ocrStatus = 'No text found in image');
         return;
@@ -79,8 +82,11 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
       final amountMatch = RegExp(r'(?:ETB|Birr|Br)\s*[:\-]?\s*(\d{1,6}(?:\.\d{1,2})?)',
           caseSensitive: false).firstMatch(text);
       if (amountMatch != null && _amountController.text.isEmpty) {
+        debugPrint('[OCR] found amount: ${amountMatch.group(1)}');
         _amountController.text = amountMatch.group(1)!;
         ref.read(verifyProvider.notifier).setAmount(double.parse(amountMatch.group(1)!));
+      } else {
+        debugPrint('[OCR] amount not found or already set');
       }
 
       final refMatch = RegExp(
@@ -88,7 +94,32 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
         caseSensitive: false,
       ).firstMatch(text);
       if (refMatch != null) {
+        debugPrint('[OCR] found ref: ${refMatch.group(0)}');
         ref.read(verifyProvider.notifier).setCode(refMatch.group(0)!);
+      } else {
+        debugPrint('[OCR] ref not found');
+      }
+
+      final accountMatch = RegExp(
+        r'(?:Account|A/C|Acct)[\s#:]*(\*{1,6}\s*\d{3,6})',
+        caseSensitive: false,
+      ).firstMatch(text);
+      if (accountMatch != null) {
+        debugPrint('[OCR] found account: ${accountMatch.group(1)}');
+        ref.read(verifyProvider.notifier).setReceiverAccount(accountMatch.group(1)!);
+      } else {
+        debugPrint('[OCR] account not found');
+      }
+
+      final dateMatch = RegExp(
+        r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})[\s,]*(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)',
+        caseSensitive: false,
+      ).firstMatch(text);
+      if (dateMatch != null) {
+        debugPrint('[OCR] found date: ${dateMatch.group(0)}');
+        ref.read(verifyProvider.notifier).setTransactionDate(dateMatch.group(0)!);
+      } else {
+        debugPrint('[OCR] date not found');
       }
 
       final lines = text.split('\n');
@@ -104,6 +135,14 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
           }
           break;
         }
+      }
+
+      final bankName = _detectBankFromText(text);
+      if (bankName != null) {
+        debugPrint('[OCR] detected bank: $bankName');
+        ref.read(verifyProvider.notifier).setBank(bankName);
+      } else {
+        debugPrint('[OCR] bank not detected in receipt text');
       }
 
       setState(() {
@@ -162,9 +201,27 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
 
   void _runVerificationCheck() {
     final st = ref.read(verifyProvider);
+    debugPrint('[Verify] runLiveCheck: bank="${st.selectedBank}" amount=${st.amount} ref="${st.referenceCode}" orderTotal=${st.orderTotal}');
     if (st.selectedBank != null && st.amount > 0 && _selectedImage != null) {
       ref.read(verifyProvider.notifier).runLiveCheck();
     }
+  }
+
+  String? _detectBankFromText(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('commercial bank of ethiopia') || lower.contains(RegExp(r'\bcbe\b', caseSensitive: false))) {
+      return BankName.cbe.displayName;
+    }
+    if (lower.contains('cbe birr')) {
+      return BankName.cbeBirr.displayName;
+    }
+    if (lower.contains('telebirr')) {
+      return BankName.telebirr.displayName;
+    }
+    if (lower.contains('awash')) {
+      return BankName.awash.displayName;
+    }
+    return null;
   }
 
   Future<void> _verify() async {
@@ -192,6 +249,8 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
     final notifier = ref.read(verifyProvider.notifier);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
+    final bankAccountsAsync = ref.watch(bankAccountsProvider);
+    debugPrint('[Verify] BUILD: bank="${state.selectedBank}" ref="${state.referenceCode}" amount=${state.amount} receiver="${state.receiverAccount}" date="${state.transactionDate}" result=${state.result != null}');
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
     final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
@@ -335,14 +394,31 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                   ),
                 ],
 
-                if (state.verification != null && !state.isVerifying) ...[
+                if (state.selectedBank != null || state.referenceCode.isNotEmpty || state.amount > 0) ...[
                   const SizedBox(height: 20),
-                  _VerificationChecks(
-                    verification: state.verification!,
-                    textPrimary: textPrimary,
-                    textSecondary: textSecondary,
-                    card: card,
-                    borderColor: borderColor,
+                  bankAccountsAsync.when(
+                    data: (accounts) => _VerificationResult(
+                      state: state,
+                      bankAccounts: accounts,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      card: card,
+                      borderColor: borderColor,
+                    ),
+                    loading: () => _VerificationResult(
+                      state: state,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      card: card,
+                      borderColor: borderColor,
+                    ),
+                    error: (_, __) => _VerificationResult(
+                      state: state,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      card: card,
+                      borderColor: borderColor,
+                    ),
                   ),
                 ],
 
@@ -510,110 +586,285 @@ class _ImageUploadZone extends StatelessWidget {
   }
 }
 
-class _VerificationChecks extends StatelessWidget {
-  const _VerificationChecks({
-    required this.verification,
+class _VerificationResult extends StatelessWidget {
+  const _VerificationResult({
+    required this.state,
+    this.bankAccounts = const [],
     required this.textPrimary,
     required this.textSecondary,
     required this.card,
     required this.borderColor,
   });
 
-  final ReceiptVerification verification;
+  final VerifyState state;
+  final List<BankAccountEntity> bankAccounts;
   final Color textPrimary, textSecondary, card, borderColor;
 
   @override
   Widget build(BuildContext context) {
+    final steps = _buildSteps();
+    final passedCount = steps.where((s) => s.passed).length;
+    debugPrint('[Verify] steps built: ${steps.length} total, $passedCount passed');
+    for (final s in steps) {
+      debugPrint('[Verify]  step: "${s.label}" value="${s.value}" passed=${s.passed} percent=${s.percent}');
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.3)),
+        border: Border.all(
+          color: passedCount == steps.length
+              ? AppTheme.success.withOpacity(0.3)
+              : borderColor,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.fact_check_rounded,
-                  color: verification.allPassed
-                      ? AppTheme.success
-                      : AppTheme.pending,
-                  size: 18),
-              const SizedBox(width: 8),
-              Text('Receipt Verification',
-                  style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+              Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryGreen.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.document_scanner_rounded,
+                  color: AppTheme.primaryGreen, size: 16,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text('Verification Steps',
+                  style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                       color: textPrimary)),
               const Spacer(),
-              Text('${verification.passedCount}/4',
+              Text('$passedCount/${steps.length}',
                   style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: verification.allPassed
-                          ? AppTheme.success
-                          : AppTheme.pending)),
+                      color: textSecondary)),
             ],
           ),
-          const SizedBox(height: 12),
-          _CheckItem(
-            label: 'Owner: ${verification.ownerName}',
-            passed: verification.ownerNameMatch,
-            textSecondary: textSecondary,
-          ),
-          const SizedBox(height: 6),
-          _CheckItem(
-            label: 'Payment amount valid',
-            passed: verification.amountValid,
-            textSecondary: textSecondary,
-          ),
-          const SizedBox(height: 6),
-          _CheckItem(
-            label: 'Reference code format',
-            passed: verification.referenceFormatValid,
-            textSecondary: textSecondary,
-          ),
-          const SizedBox(height: 6),
-          _CheckItem(
-            label: 'Receipt image integrity',
-            passed: verification.imageIntegrity,
-            textSecondary: textSecondary,
-          ),
+          const SizedBox(height: 14),
+          ...steps.asMap().entries.map((e) => Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _StepRow(
+              step: e.value,
+              textSecondary: textSecondary,
+              isLast: e.key == steps.length - 1,
+            ),
+          )),
         ],
       ),
     );
   }
+
+  List<_StepData> _buildSteps() {
+    final st = state;
+    final isVerified = st.result != null;
+    final isDuplicate = st.result?.riskFlags.any(
+      (f) => f.toLowerCase().contains('duplicate') || f.toLowerCase().contains('already used'),
+    ) ?? false;
+
+    String accMatchValue = 'Pending';
+    bool accMatchPassed = false;
+    double accMatchPercent = 0;
+    if (st.receiverAccount.isNotEmpty) {
+      final trailingDigits = st.receiverAccount.replaceAll(RegExp(r'^[\s*\d]*\*+'), '').replaceAll(RegExp(r'[^\d]'), '');
+      debugPrint('[Verify] receiverAccount="${st.receiverAccount}" → trailingDigits="$trailingDigits"');
+      debugPrint('[Verify] bankAccounts count=${bankAccounts.length}');
+      String? matched;
+      double bestMatch = 0;
+      for (final acct in bankAccounts) {
+        final stored = acct.accountNumber.replaceAll(RegExp(r'[\s-]+'), '');
+        debugPrint('[Verify] checking acct: bank="${acct.bankName}" stored="$stored" selectedBank="${st.selectedBank}"');
+        if (st.selectedBank != null && !acct.bankName.contains(RegExp(RegExp.escape(st.selectedBank!), caseSensitive: false))) {
+          debugPrint('[Verify]  → skipped (bank mismatch)');
+          continue;
+        }
+        if (trailingDigits.isNotEmpty && stored.endsWith(trailingDigits)) {
+          final pct = trailingDigits.length / stored.length * 100;
+          debugPrint('[Verify]  → MATCH! pct=$pct');
+          if (pct > bestMatch) {
+            bestMatch = pct;
+            matched = acct.accountNumber;
+          }
+        } else {
+          debugPrint('[Verify]  → no match');
+        }
+      }
+      if (matched != null) {
+        accMatchPercent = bestMatch.clamp(0.0, 100.0);
+        accMatchPassed = bestMatch >= 30;
+        accMatchValue = '${st.receiverAccount} vs $matched';
+        debugPrint('[Verify] account match FOUND: $accMatchValue (${accMatchPercent.toStringAsFixed(0)}%)');
+      } else {
+        final expected = bankAccounts.isNotEmpty ? bankAccounts.first.accountNumber : '—';
+        accMatchValue = '${st.receiverAccount} vs $expected';
+        debugPrint('[Verify] account match NOT FOUND. bankAccounts count=${bankAccounts.length}, first=$expected');
+      }
+    } else {
+      debugPrint('[Verify] receiverAccount is empty, skipping account match');
+    }
+
+    return [
+      _StepData(
+        icon: Icons.account_balance_rounded,
+        label: 'Detect payment method',
+        value: st.selectedBank ?? 'Pending',
+        passed: st.selectedBank != null,
+        percent: 100,
+      ),
+      _StepData(
+        icon: Icons.receipt_rounded,
+        label: 'Fetch receipt page',
+        value: st.referenceCode.isNotEmpty ? 'TX: ${st.referenceCode}' : 'Pending',
+        passed: st.referenceCode.isNotEmpty,
+        percent: st.referenceCode.isNotEmpty ? 100 : 0,
+      ),
+      _StepData(
+        icon: Icons.monetization_on_rounded,
+        label: 'Extract amount',
+        value: st.amount > 0
+            ? '${st.amount.toStringAsFixed(0)} ETB${st.expectedAmount > 0 ? ' (expected: ${st.expectedAmount.toStringAsFixed(0)} ETB)' : ''}'
+            : 'Pending',
+        passed: st.amount > 0,
+        percent: st.amount > 0 ? 100 : 0,
+      ),
+      _StepData(
+        icon: Icons.compare_arrows_rounded,
+        label: 'Amount match (5% tolerance)',
+        value: st.amount > 0 && st.expectedAmount > 0
+            ? '${st.tolerancePercent.toStringAsFixed(1)}% difference'
+            : 'Pending',
+        passed: st.tolerancePassed,
+        percent: st.amount > 0 ? ((1 - st.tolerancePercent / 100) * 100).clamp(0.0, 100.0).roundToDouble() : 0,
+      ),
+      _StepData(
+        icon: Icons.credit_card_rounded,
+        label: 'Extract receiver account',
+        value: st.receiverAccount.isNotEmpty ? st.receiverAccount : 'Pending',
+        passed: st.receiverAccount.isNotEmpty,
+        percent: st.receiverAccount.isNotEmpty ? 100 : 0,
+      ),
+      _StepData(
+        icon: Icons.compare_arrows_rounded,
+        label: 'Receiver account match',
+        value: accMatchValue,
+        detail: accMatchPercent > 0 ? 'Match: ${accMatchPercent.toStringAsFixed(0)}%' : null,
+        passed: accMatchPassed,
+        percent: accMatchPercent,
+      ),
+      _StepData(
+        icon: Icons.calendar_today_rounded,
+        label: 'Transaction date',
+        value: st.transactionDate.isNotEmpty ? st.transactionDate : 'Pending',
+        passed: st.transactionDate.isNotEmpty,
+        percent: st.transactionDate.isNotEmpty ? 100 : 0,
+      ),
+      _StepData(
+        icon: Icons.verified_user_rounded,
+        label: 'Duplicate check',
+        value: isVerified
+            ? (isDuplicate ? 'Duplicate found' : 'No duplicates \u2014 validity confirmed')
+            : 'Pending verification',
+        passed: isVerified && !isDuplicate,
+        percent: isVerified ? (isDuplicate ? 0 : 100) : 0,
+      ),
+    ];
+  }
 }
 
-class _CheckItem extends StatelessWidget {
-  const _CheckItem({
-    required this.label,
-    required this.passed,
-    required this.textSecondary,
-  });
-  final String label;
+class _StepData {
+  final IconData icon;
+  final String label, value;
   final bool passed;
+  final String? detail;
+  final double percent;
+  const _StepData({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.passed = false,
+    this.detail,
+    this.percent = 0,
+  });
+}
+
+class _StepRow extends StatelessWidget {
+  const _StepRow({
+    required this.step,
+    required this.textSecondary,
+    this.isLast = false,
+  });
+  final _StepData step;
   final Color textSecondary;
+  final bool isLast;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          passed ? Icons.check_circle_rounded : Icons.hourglass_empty_rounded,
-          color: passed ? AppTheme.success : AppTheme.pending,
-          size: 16,
+        Row(
+          children: [
+            SizedBox(
+              width: 18,
+              child: Icon(
+                step.passed ? Icons.check_circle_rounded : Icons.hourglass_empty_rounded,
+                color: step.passed ? AppTheme.success : AppTheme.pending,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 144,
+              child: Text(step.label,
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: textSecondary, fontWeight: FontWeight.w500)),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(step.value,
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: step.passed ? AppTheme.success : AppTheme.pending),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            if (step.percent > 0)
+              Container(
+                margin: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (step.percent >= 100 ? AppTheme.success : AppTheme.pending).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('${step.percent.toStringAsFixed(0)}%',
+                    style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: step.percent >= 100 ? AppTheme.success : AppTheme.pending)),
+              ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            color: passed ? AppTheme.success : textSecondary,
+        if (step.detail != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 26, top: 2),
+            child: Text(step.detail!,
+                style: GoogleFonts.inter(
+                    fontSize: 11, color: textSecondary, fontStyle: FontStyle.italic)),
           ),
-        ),
+        if (!isLast)
+          Padding(
+            padding: const EdgeInsets.only(left: 8, top: 4),
+            child: Container(width: 1, height: 10, color: textSecondary.withOpacity(0.15)),
+          ),
       ],
     );
   }

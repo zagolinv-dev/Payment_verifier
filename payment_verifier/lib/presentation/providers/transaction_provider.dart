@@ -113,7 +113,10 @@ class VerifyState {
     this.selectedBank,
     this.referenceCode = '',
     this.buyerName = '',
+    this.receiverAccount = '',
+    this.transactionDate = '',
     this.orderTotal = 0.0,
+    this.expectedAmount = 0.0,
     this.amount = 0.0,
     this.tip = 0.0,
     this.isLoading = false,
@@ -127,7 +130,10 @@ class VerifyState {
   final String? selectedBank;
   final String referenceCode;
   final String buyerName;
+  final String receiverAccount;
+  final String transactionDate;
   final double orderTotal;
+  final double expectedAmount;
   final double amount;
   final double tip;
   final bool isLoading;
@@ -136,6 +142,13 @@ class VerifyState {
   final String? receiptImage;
   final ReceiptVerification? verification;
   final bool isVerifying;
+
+  double get tolerancePercent {
+    if (expectedAmount <= 0 || amount <= 0) return 0;
+    return ((amount - expectedAmount) / expectedAmount * 100).abs();
+  }
+
+  bool get tolerancePassed => tolerancePercent <= 5.0;
 
   bool get canVerify =>
       selectedBank != null &&
@@ -148,7 +161,10 @@ class VerifyState {
     String? selectedBank,
     String? referenceCode,
     String? buyerName,
+    String? receiverAccount,
+    String? transactionDate,
     double? orderTotal,
+    double? expectedAmount,
     double? amount,
     double? tip,
     bool? isLoading,
@@ -164,7 +180,10 @@ class VerifyState {
       selectedBank: selectedBank ?? this.selectedBank,
       referenceCode: referenceCode ?? this.referenceCode,
       buyerName: buyerName ?? this.buyerName,
+      receiverAccount: receiverAccount ?? this.receiverAccount,
+      transactionDate: transactionDate ?? this.transactionDate,
       orderTotal: orderTotal ?? this.orderTotal,
+      expectedAmount: expectedAmount ?? this.expectedAmount,
       amount: amount ?? this.amount,
       tip: tip ?? this.tip,
       isLoading: isLoading ?? this.isLoading,
@@ -259,7 +278,9 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
   void setBank(String bank) => state = state.copyWith(selectedBank: bank);
   void setCode(String code) => state = state.copyWith(referenceCode: code);
   void setBuyerName(String name) => state = state.copyWith(buyerName: name);
-  void setOrderTotal(double val) => state = state.copyWith(orderTotal: val);
+  void setReceiverAccount(String acct) => state = state.copyWith(receiverAccount: acct);
+  void setTransactionDate(String date) => state = state.copyWith(transactionDate: date);
+  void setOrderTotal(double val) => state = state.copyWith(orderTotal: val, expectedAmount: val);
   void setAmount(double amt) {
     final tip = amt > state.orderTotal ? amt - state.orderTotal : 0.0;
     state = state.copyWith(amount: amt, tip: tip);

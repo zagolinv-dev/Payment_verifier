@@ -186,11 +186,18 @@ class SettingsScreen extends ConsumerWidget {
               // ── Sign Out ──────────────────────────────────────────────
               _SignOutButton(
                 onTap: () async {
-                  final confirmed = await _showLogoutDialog(context, isDark, card, textPrimary, textSecondary);
-                  if (confirmed != true) return;
-                  if (!context.mounted) return;
-                  await ref.read(authProvider.notifier).signOut();
-                  if (context.mounted) context.go(AppRoutes.auth);
+                  try {
+                    debugPrint('[Settings] Sign Out tapped');
+                    final confirmed = await _showLogoutDialog(context, isDark, card, textPrimary, textSecondary);
+                    debugPrint('[Settings] dialog result: $confirmed');
+                    if (confirmed != true) return;
+                    if (!context.mounted) return;
+                    await ref.read(authProvider.notifier).signOut();
+                    debugPrint('[Settings] signOut completed');
+                    if (context.mounted) context.go(AppRoutes.auth);
+                  } catch (e) {
+                    debugPrint('[Settings] sign out error: $e');
+                  }
                 },
               ),
               const SizedBox(height: 8),
@@ -238,26 +245,19 @@ Future<bool?> _showLogoutDialog(BuildContext context, bool isDark, Color card, C
         ],
       ),
       actions: [
-        ButtonBar(
-          buttonMinWidth: 110,
-          buttonPadding: EdgeInsets.zero,
-          alignment: MainAxisAlignment.end,
-          children: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary, fontWeight: FontWeight.w600)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.error,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
-              child: Text('Sign Out', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            ),
-          ],
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary, fontWeight: FontWeight.w600)),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.error,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
+          child: Text('Sign Out', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
         ),
       ],
     ),
@@ -352,32 +352,25 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
             ),
           ),
           actions: [
-            ButtonBar(
-              buttonMinWidth: 110,
-              buttonPadding: EdgeInsets.zero,
-              alignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text('Cancel', style: GoogleFonts.inter(color: textTertiary)),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (!formKey.currentState!.validate()) return;
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Password updated successfully', style: GoogleFonts.inter(color: Colors.white)),
-                        backgroundColor: AppTheme.primaryGreen,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: Text('Update', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-                ),
-              ],
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.inter(color: textTertiary)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (!formKey.currentState!.validate()) return;
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Password updated successfully', style: GoogleFonts.inter(color: Colors.white)),
+                    backgroundColor: AppTheme.primaryGreen,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: Text('Update', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
             ),
           ],
         );
@@ -685,7 +678,10 @@ class _SignOutButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        debugPrint('[Settings] _SignOutButton tapped');
+        onTap();
+      },
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16),
