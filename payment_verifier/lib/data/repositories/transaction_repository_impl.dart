@@ -74,4 +74,8 @@ class TransactionRepositoryImpl implements TransactionRepository {
     final metrics = await _datasource.getDashboardMetrics();
     return (total: metrics.todayTotal, count: metrics.todayCount);
   }
+
+  @override
+  Future<Map<String, double>> getWeeklyTotals() =>
+      _datasource.getWeeklyTotals();
 }

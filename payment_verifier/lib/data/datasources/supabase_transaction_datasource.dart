@@ -101,22 +101,96 @@ class SupabaseTransactionDatasource {
   }
 
   Future<DashboardMetrics> getDashboardMetrics() async {
-    final all = await getTransactions();
-    final today = DateTime.now();
-    final todayTx = all.where((t) {
-      final d = t.createdAt;
-      return d.year == today.year && d.month == today.month && d.day == today.day;
-    }).toList();
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+
+    final todayResponse = await _client
+        .from(AppConstants.transactionsTable)
+        .select('amount, tip, status')
+        .gte('created_at', todayStart.toIso8601String())
+        .lt('created_at', todayEnd.toIso8601String());
+    final todayTxs = (todayResponse as List).cast<Map<String, dynamic>>();
+
+    final allResponse = await _client
+        .from(AppConstants.transactionsTable)
+        .select('amount, tip');
+    final allTxs = (allResponse as List).cast<Map<String, dynamic>>();
+
+    double totalIncome = 0, totalTips = 0;
+    for (final t in allTxs) {
+      totalIncome += (t['amount'] as num).toDouble();
+      totalTips += (t['tip'] as num).toDouble();
+    }
+
+    int verifiedToday = 0, failedToday = 0;
+    double todayTotal = 0;
+    for (final t in todayTxs) {
+      final status = t['status'] as String;
+      final amt = (t['amount'] as num).toDouble();
+      final tip = (t['tip'] as num).toDouble();
+      if (status == 'VERIFIED') verifiedToday++;
+      if (status == 'FAILED' || status == 'FRAUD_SUSPECTED') failedToday++;
+      todayTotal += amt + tip;
+    }
 
     return DashboardMetrics(
-      totalIncome: all.fold(0.0, (sum, t) => sum + t.amount),
-      totalTips: all.fold(0.0, (sum, t) => sum + t.tip),
-      verifiedToday: todayTx.where((t) => t.status == TransactionStatus.verified).length,
-      failedToday: todayTx.where((t) =>
-          t.status == TransactionStatus.failed ||
-          t.status == TransactionStatus.fraudSuspected).length,
-      todayTotal: todayTx.fold(0.0, (sum, t) => sum + t.total),
-      todayCount: todayTx.length,
+      totalIncome: totalIncome,
+      totalTips: totalTips,
+      verifiedToday: verifiedToday,
+      failedToday: failedToday,
+      todayTotal: todayTotal,
+      todayCount: todayTxs.length,
     );
+  }
+
+  Future<Map<String, double>> getWeeklyTotals() async {
+    final now = DateTime.now();
+    final weekday = now.weekday;
+    final weekStart = DateTime(now.year, now.month, now.day - weekday + 1);
+    final weekEnd = weekStart.add(const Duration(days: 7));
+
+    final response = await _client
+        .from(AppConstants.transactionsTable)
+        .select('amount, created_at')
+        .gte('created_at', weekStart.toIso8601String())
+        .lt('created_at', weekEnd.toIso8601String());
+
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final totals = <String, double>{};
+    for (final day in dayNames) totals[day] = 0;
+
+    for (final t in (response as List).cast<Map<String, dynamic>>()) {
+      final createdAt = DateTime.parse(t['created_at'] as String);
+      totals[dayNames[createdAt.weekday - 1]] =
+          (totals[dayNames[createdAt.weekday - 1]]! + (t['amount'] as num).toDouble());
+    }
+
+    return totals;
+  }
+
+  Future<void> recordInvalidAttempt({
+    required String referenceCode,
+    required double amount,
+    required String receiverAccount,
+    required String transactionDate,
+    required String bankName,
+    required String buyerName,
+    required String failureReason,
+    required int attemptCount,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    await _client.from('verification_attempts').insert({
+      'reference_code': referenceCode,
+      'amount': amount,
+      'receiver_account': receiverAccount,
+      'transaction_date': transactionDate,
+      'bank_name': bankName,
+      'buyer_name': buyerName,
+      'failure_reason': failureReason,
+      'attempt_count': attemptCount,
+      'verified_by': userId,
+      'created_at': DateTime.now().toIso8601String(),
+    });
   }
 }

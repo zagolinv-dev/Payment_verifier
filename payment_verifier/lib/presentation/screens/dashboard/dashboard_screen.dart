@@ -517,25 +517,18 @@ class _EmptyTransactions extends StatelessWidget {
   }
 }
 
-class _WeeklyChart extends StatefulWidget {
+class _WeeklyChart extends ConsumerStatefulWidget {
   const _WeeklyChart({required this.isDark, required this.card, required this.borderColor, required this.textPrimary, required this.textTertiary});
   final bool isDark;
   final Color card, borderColor, textPrimary, textTertiary;
 
   @override
-  State<_WeeklyChart> createState() => _WeeklyChartState();
+  ConsumerState<_WeeklyChart> createState() => _WeeklyChartState();
 }
 
-class _WeeklyChartState extends State<_WeeklyChart> with SingleTickerProviderStateMixin {
+class _WeeklyChartState extends ConsumerState<_WeeklyChart> with SingleTickerProviderStateMixin {
   late AnimationController _anim;
   late Animation<double> _progress;
-
-  final List<_BarData> _bars = const [
-    _BarData(day: 'Mon', value: 0.45), _BarData(day: 'Tue', value: 0.72),
-    _BarData(day: 'Wed', value: 0.58), _BarData(day: 'Thu', value: 0.90),
-    _BarData(day: 'Fri', value: 0.65), _BarData(day: 'Sat', value: 1.0),
-    _BarData(day: 'Sun', value: 0.35),
-  ];
 
   @override
   void initState() {
@@ -550,6 +543,10 @@ class _WeeklyChartState extends State<_WeeklyChart> with SingleTickerProviderSta
 
   @override
   Widget build(BuildContext context) {
+    final weeklyAsync = ref.watch(weeklyTotalsProvider);
+    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final now = DateTime.now();
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: widget.card, borderRadius: BorderRadius.circular(20), border: Border.all(color: widget.borderColor)),
@@ -563,20 +560,40 @@ class _WeeklyChartState extends State<_WeeklyChart> with SingleTickerProviderSta
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: AppTheme.primaryGreen.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                child: Text('Volume', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryGreen)),
+                child: Text('Total', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryGreen)),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          AnimatedBuilder(
-            animation: _progress,
-            builder: (_, __) => SizedBox(
+          weeklyAsync.when(
+            data: (totals) {
+              final maxVal = totals.values.reduce((a, b) => a > b ? a : b);
+              return AnimatedBuilder(
+                animation: _progress,
+                builder: (_, __) => SizedBox(
+                  height: 100,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: dayNames.asMap().entries.map((e) {
+                      final day = e.value;
+                      final raw = totals[day] ?? 0;
+                      final norm = maxVal > 0 ? raw / maxVal : 0.0;
+                      return _BarColumn(
+                        data: _BarData(day: day, value: norm),
+                        progress: _progress.value,
+                        isToday: e.key == now.weekday - 1,
+                        textTertiary: widget.textTertiary,
+                      );
+                    }).toList(),
+                  ),
+                ),
+              );
+            },
+            loading: () => const SizedBox(height: 100),
+            error: (_, __) => SizedBox(
               height: 100,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: _bars.map((b) => _BarColumn(data: b, progress: _progress.value, isToday: b.day == 'Sat', textTertiary: widget.textTertiary)).toList(),
-              ),
+              child: Center(child: Text('No data', style: GoogleFonts.inter(fontSize: 12, color: widget.textTertiary))),
             ),
           ),
         ],

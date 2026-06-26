@@ -81,10 +81,10 @@ class PaymentValidators {
   PaymentValidators._();
 
   static final Map<BankName, RegExp> referencePatterns = {
-    BankName.cbe: RegExp(r'^FT\d{12}$'),
-    BankName.telebirr: RegExp(r'^TLB\d{8}$'),
-    BankName.cbeBirr: RegExp(r'^CB\d{10}$'),
-    BankName.awash: RegExp(r'^AW\d{10}$'),
+    BankName.cbe: RegExp(r'^FT[A-Z0-9]{10}$'),
+    BankName.telebirr: RegExp(r'^TLB[A-Z0-9]{8}$'),
+    BankName.cbeBirr: RegExp(r'^CB[A-Z0-9]{10}$'),
+    BankName.awash: RegExp(r'^AW[A-Z0-9]{10}$'),
   };
 
   static bool validateReference(String code, BankName bank) {

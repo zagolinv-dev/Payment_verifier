@@ -39,6 +39,9 @@ abstract class TransactionRepository {
 
   /// Today's ledger total
   Future<({double total, int count})> getTodayLedger();
+
+  /// Weekly totals grouped by day (Mon-Sun)
+  Future<Map<String, double>> getWeeklyTotals();
 }
 
 class DashboardMetrics {

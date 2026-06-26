@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/core/utils/formatters.dart';
+import 'package:payment_verifier/data/services/ocr_service.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/domain/entities/bank_account_entity.dart';
@@ -32,7 +33,9 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
   final _orderTotalController = TextEditingController();
   final _buyerController = TextEditingController();
   final _amountController = TextEditingController();
+  final _receiverAcctController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _ocrService = OcrService();
   XFile? _selectedImage;
 
   String _ocrStatus = '';
@@ -56,6 +59,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
     _orderTotalController.dispose();
     _buyerController.dispose();
     _amountController.dispose();
+    _receiverAcctController.dispose();
     _resultAnim.dispose();
     super.dispose();
   }
@@ -68,94 +72,87 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
 
     try {
       final inputImage = InputImage.fromFilePath(imagePath);
-      final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
-      final recognisedText = await recognizer.processImage(inputImage);
-      recognizer.close();
+      final result = await _ocrService.processImage(inputImage);
+      debugPrint('[OCR] result: $result');
+      debugPrint('[OCR] rawText (${result.rawText.length} chars):\n${result.rawText}');
+      print('[Verify] RAWTEXT >>>${result.rawText}<<<');
+      print('[Verify] ref=${result.reference} amount=${result.amount} receiver=${result.receiverAccount} date=${result.date} now=${DateTime.now()} attempt=${ref.read(verifyProvider).attemptCount + 1}');
 
-      final text = recognisedText.text;
-      debugPrint('[OCR] raw text (${text.length} chars): ${text.length > 500 ? "${text.substring(0, 500)}..." : text}');
-      if (text.isEmpty) {
-        setState(() => _ocrStatus = 'No text found in image');
-        return;
+      if (result.hasAmount && _amountController.text.isEmpty) {
+        _amountController.text = result.amount!;
+        ref.read(verifyProvider.notifier).setAmount(double.parse(result.amount!));
       }
 
-      final amountMatch = RegExp(r'(?:ETB|Birr|Br)\s*[:\-]?\s*(\d{1,6}(?:\.\d{1,2})?)',
-          caseSensitive: false).firstMatch(text);
-      if (amountMatch != null && _amountController.text.isEmpty) {
-        debugPrint('[OCR] found amount: ${amountMatch.group(1)}');
-        _amountController.text = amountMatch.group(1)!;
-        ref.read(verifyProvider.notifier).setAmount(double.parse(amountMatch.group(1)!));
-      } else {
-        debugPrint('[OCR] amount not found or already set');
+      if (result.hasReference) {
+        ref.read(verifyProvider.notifier).setCode(result.reference!);
       }
 
-      final refMatch = RegExp(
-        r'(?:TXN|TRX|REF|TRANS|CBE|AW|CBB)\d{6,12}',
-        caseSensitive: false,
-      ).firstMatch(text);
-      if (refMatch != null) {
-        debugPrint('[OCR] found ref: ${refMatch.group(0)}');
-        ref.read(verifyProvider.notifier).setCode(refMatch.group(0)!);
-      } else {
-        debugPrint('[OCR] ref not found');
+      final bank = _mapPaymentMethodToBank(result.paymentMethod);
+      if (bank != null) {
+        debugPrint('[OCR] mapped bank: $bank');
+        ref.read(verifyProvider.notifier).setBank(bank);
       }
 
-      final accountMatch = RegExp(
-        r'(?:Account|A/C|Acct)[\s#:]*(\*{1,6}\s*\d{3,6})',
-        caseSensitive: false,
-      ).firstMatch(text);
-      if (accountMatch != null) {
-        debugPrint('[OCR] found account: ${accountMatch.group(1)}');
-        ref.read(verifyProvider.notifier).setReceiverAccount(accountMatch.group(1)!);
-      } else {
-        debugPrint('[OCR] account not found');
+      if (result.receiverAccount != null && result.receiverAccount!.isNotEmpty) {
+        _receiverAcctController.text = result.receiverAccount!;
+        ref.read(verifyProvider.notifier).setReceiverAccount(result.receiverAccount!);
       }
 
-      final dateMatch = RegExp(
-        r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})[\s,]*(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)',
-        caseSensitive: false,
-      ).firstMatch(text);
-      if (dateMatch != null) {
-        debugPrint('[OCR] found date: ${dateMatch.group(0)}');
-        ref.read(verifyProvider.notifier).setTransactionDate(dateMatch.group(0)!);
-      } else {
-        debugPrint('[OCR] date not found');
-      }
-
-      final lines = text.split('\n');
-      for (final line in lines) {
-        final trimmed = line.trim();
-        if (trimmed.length > 3 && trimmed.length < 40 &&
-            !trimmed.contains(RegExp(r'\d')) &&
-            !trimmed.contains(RegExp(r'(?:receipt|payment|transfer|date|time|total|amount|ETB|Birr)',
-                caseSensitive: false))) {
-          if (_buyerController.text.isEmpty) {
-            _buyerController.text = trimmed;
-            ref.read(verifyProvider.notifier).setBuyerName(trimmed);
-          }
-          break;
+      if (result.receiverName != null && result.receiverName!.isNotEmpty) {
+        if (_buyerController.text.isEmpty) {
+          _buyerController.text = result.receiverName!;
         }
+        ref.read(verifyProvider.notifier).setBuyerName(result.receiverName!);
+      } else if (result.senderName != null && result.senderName!.isNotEmpty) {
+        if (_buyerController.text.isEmpty) {
+          _buyerController.text = result.senderName!;
+        }
+        ref.read(verifyProvider.notifier).setBuyerName(result.senderName!);
       }
 
-      final bankName = _detectBankFromText(text);
-      if (bankName != null) {
-        debugPrint('[OCR] detected bank: $bankName');
-        ref.read(verifyProvider.notifier).setBank(bankName);
-      } else {
-        debugPrint('[OCR] bank not detected in receipt text');
+      if (result.date != null && result.date!.isNotEmpty) {
+        // Override the scan date with the actual receipt date for freshness check
+        ref.read(verifyProvider.notifier).setTransactionDate(result.date!);
       }
 
       setState(() {
-        _ocrStatus = 'OCR complete — ${recognisedText.text.length} chars';
+        _ocrStatus = 'OCR complete — ${result.rawText.length} chars';
         _isOcrRunning = false;
       });
+      ref.read(verifyProvider.notifier).setOcrCompleted();
+      _runVerificationCheck();
     } catch (e) {
+      debugPrint('[OCR] failed: $e');
       setState(() {
         _ocrStatus = 'OCR failed: $e';
         _isOcrRunning = false;
       });
     }
   }
+
+  String? _mapPaymentMethodToBank(String? method) {
+    switch (method) {
+      case 'cbe':
+      case 'boa':
+      case 'zemen':
+      case 'dashen':
+        return BankName.cbe.displayName;
+      case 'awash':
+        return BankName.awash.displayName;
+      case 'telebirr':
+      case 'mpesa':
+        return BankName.telebirr.displayName;
+      case 'cbe_birr':
+        return BankName.cbeBirr.displayName;
+      default:
+        return null;
+    }
+  }
+
+  String _monthAbbr(int m) => [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ][m - 1];
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -193,6 +190,11 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
       if (file != null && mounted) {
         setState(() => _selectedImage = file);
         ref.read(verifyProvider.notifier).setReceiptImage(file.path);
+        final now = DateTime.now();
+        final h = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
+        final ampm = now.hour >= 12 ? 'PM' : 'AM';
+        final dateStr = '${_monthAbbr(now.month)} ${now.day}, ${now.year} $h:${now.minute.toString().padLeft(2, '0')} $ampm';
+        ref.read(verifyProvider.notifier).setTransactionDate(dateStr);
         _processOcr(file.path);
         _runVerificationCheck();
       }
@@ -201,32 +203,52 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
 
   void _runVerificationCheck() {
     final st = ref.read(verifyProvider);
-    debugPrint('[Verify] runLiveCheck: bank="${st.selectedBank}" amount=${st.amount} ref="${st.referenceCode}" orderTotal=${st.orderTotal}');
+    debugPrint('[Verify] runLiveCheck: bank="${st.selectedBank}" amount=${st.amount} ref="${st.referenceCode}" orderTotal=${st.orderTotal} receiver="${st.receiverAccount}"');
     if (st.selectedBank != null && st.amount > 0 && _selectedImage != null) {
       ref.read(verifyProvider.notifier).runLiveCheck();
     }
-  }
 
-  String? _detectBankFromText(String text) {
-    final lower = text.toLowerCase();
-    if (lower.contains('commercial bank of ethiopia') || lower.contains(RegExp(r'\bcbe\b', caseSensitive: false))) {
-      return BankName.cbe.displayName;
+    final accounts = ref.read(bankAccountsProvider).valueOrNull ?? [];
+    if (st.receiverAccount.isNotEmpty && accounts.isNotEmpty) {
+      final normalized = st.receiverAccount.replaceAll(RegExp(r'[\s-]+'), '');
+      // Extract the visible suffix from the masked receipt number.
+      // e.g. "1*****127" → suffix "127", "01347******0700" → suffix "0700"
+      final suffix = normalized.contains('*')
+          ? normalized.split('*').last
+          : normalized; // if not masked, use the whole number
+      debugPrint('[Verify] accountMatch: receipt="$normalized" suffix="$suffix"');
+      String? matched;
+      String? matchedNumber;
+      for (final acct in accounts) {
+        final stored = acct.accountNumber.replaceAll(RegExp(r'[\s-]+'), '');
+        if (stored.endsWith(suffix)) {
+          matched = acct.accountNumber;
+          matchedNumber = stored;
+          break;
+        }
+      }
+      final passed = matched != null;
+      final note = matched != null
+          ? 'suffix match: $matched (ends with $suffix)'
+          : 'no account ending with "$suffix" found';
+      ref.read(verifyProvider.notifier).setAccountMatch(passed, '${st.receiverAccount} vs $note');
+      debugPrint('[Verify] accountMatch: passed=$passed note=$note');
     }
-    if (lower.contains('cbe birr')) {
-      return BankName.cbeBirr.displayName;
+
+    if (st.referenceCode.isNotEmpty) {
+      ref.read(verifyProvider.notifier).checkDuplicate();
     }
-    if (lower.contains('telebirr')) {
-      return BankName.telebirr.displayName;
+
+    if (st.transactionDate.isNotEmpty) {
+      ref.read(verifyProvider.notifier).runDateFreshnessCheck();
     }
-    if (lower.contains('awash')) {
-      return BankName.awash.displayName;
-    }
-    return null;
   }
 
   Future<void> _verify() async {
     if (!_formKey.currentState!.validate()) return;
     final user = ref.read(currentUserProvider);
+    // Run freshness check before verifying
+    ref.read(verifyProvider.notifier).runDateFreshnessCheck();
     await ref.read(verifyProvider.notifier).verify(waiterName: user?.id);
     final st = ref.read(verifyProvider);
     if (st.result != null || st.error != null) {
@@ -239,6 +261,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
     _orderTotalController.clear();
     _buyerController.clear();
     _amountController.clear();
+    _receiverAcctController.clear();
     setState(() => _selectedImage = null);
     _resultAnim.reset();
   }
@@ -323,7 +346,12 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                       notifier.setBank(b);
                       _runVerificationCheck();
                     },
-                    isDark: isDark),
+                    isDark: isDark,
+                    activeBanks: bankAccountsAsync.when(
+                      data: (a) => a.where((x) => x.isActive).map((x) => x.bankName).toSet(),
+                      loading: () => <String>{},
+                      error: (_, __) => <String>{},
+                    )),
                 const SizedBox(height: 20),
 
                 AppTextField(
@@ -342,7 +370,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                     _runVerificationCheck();
                   },
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'Required';
+                    if (v == null || v.isEmpty) return null;
                     final d = double.tryParse(v);
                     if (d == null || d <= 0) return 'Invalid amount';
                     return null;
@@ -433,6 +461,22 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                           : AppTheme.lightTextTertiary,
                       size: 20),
                   onChanged: notifier.setBuyerName,
+                ),
+                const SizedBox(height: 20),
+
+                AppTextField(
+                  label: 'Receiver Account',
+                  hint: 'Account paid to',
+                  controller: _receiverAcctController,
+                  prefixIcon: Icon(Icons.credit_card_rounded,
+                      color: isDark
+                          ? AppTheme.textTertiary
+                          : AppTheme.lightTextTertiary,
+                      size: 20),
+                  onChanged: (v) {
+                    notifier.setReceiverAccount(v);
+                    _runVerificationCheck();
+                  },
                 ),
                 const SizedBox(height: 20),
 
@@ -666,116 +710,130 @@ class _VerificationResult extends StatelessWidget {
 
   List<_StepData> _buildSteps() {
     final st = state;
-    final isVerified = st.result != null;
-    final isDuplicate = st.result?.riskFlags.any(
-      (f) => f.toLowerCase().contains('duplicate') || f.toLowerCase().contains('already used'),
-    ) ?? false;
+    final v = st.hasVerified;
+
+    bool data(bool has) => has;
 
     String accMatchValue = 'Pending';
     bool accMatchPassed = false;
     double accMatchPercent = 0;
     if (st.receiverAccount.isNotEmpty) {
-      final trailingDigits = st.receiverAccount.replaceAll(RegExp(r'^[\s*\d]*\*+'), '').replaceAll(RegExp(r'[^\d]'), '');
-      debugPrint('[Verify] receiverAccount="${st.receiverAccount}" → trailingDigits="$trailingDigits"');
-      debugPrint('[Verify] bankAccounts count=${bankAccounts.length}');
-      String? matched;
-      double bestMatch = 0;
-      for (final acct in bankAccounts) {
-        final stored = acct.accountNumber.replaceAll(RegExp(r'[\s-]+'), '');
-        debugPrint('[Verify] checking acct: bank="${acct.bankName}" stored="$stored" selectedBank="${st.selectedBank}"');
-        if (st.selectedBank != null && !acct.bankName.contains(RegExp(RegExp.escape(st.selectedBank!), caseSensitive: false))) {
-          debugPrint('[Verify]  → skipped (bank mismatch)');
-          continue;
-        }
-        if (trailingDigits.isNotEmpty && stored.endsWith(trailingDigits)) {
-          final pct = trailingDigits.length / stored.length * 100;
-          debugPrint('[Verify]  → MATCH! pct=$pct');
-          if (pct > bestMatch) {
-            bestMatch = pct;
-            matched = acct.accountNumber;
-          }
-        } else {
-          debugPrint('[Verify]  → no match');
-        }
-      }
-      if (matched != null) {
-        accMatchPercent = bestMatch.clamp(0.0, 100.0);
-        accMatchPassed = bestMatch >= 30;
-        accMatchValue = '${st.receiverAccount} vs $matched';
-        debugPrint('[Verify] account match FOUND: $accMatchValue (${accMatchPercent.toStringAsFixed(0)}%)');
+      if ((st.accountMatchNote ?? '').isNotEmpty) {
+        final note = st.accountMatchNote!;
+        accMatchPassed = st.accountMatchPassed;
+        accMatchPercent = st.accountMatchPassed ? 100.0 : 0.0;
+        accMatchValue = st.accountMatchPassed ? 'Passed — $note' : 'Failed — $note';
       } else {
-        final expected = bankAccounts.isNotEmpty ? bankAccounts.first.accountNumber : '—';
-        accMatchValue = '${st.receiverAccount} vs $expected';
-        debugPrint('[Verify] account match NOT FOUND. bankAccounts count=${bankAccounts.length}, first=$expected');
+        accMatchValue = st.receiverAccount;
       }
-    } else {
-      debugPrint('[Verify] receiverAccount is empty, skipping account match');
+    }
+
+    String dupValue = 'Pending';
+    bool dupPassed = false;
+    double dupPercent = 0;
+    if (st.duplicateCheckNote.isNotEmpty) {
+      if (st.duplicateCheckPassed) {
+        dupValue = st.duplicateCheckNote;
+        dupPassed = true;
+        dupPercent = 100.0;
+      } else {
+        dupValue = st.duplicateCheckNote;
+        dupPassed = false;
+        dupPercent = 0.0;
+      }
+    }
+    // Fall back to result-based check for legacy
+    if (!st.duplicateCheckPassed && !st.duplicateCheckNote.startsWith('Already used') && st.result != null) {
+      final isDup = st.result!.riskFlags.any(
+        (f) => f.toLowerCase().contains('duplicate') || f.toLowerCase().contains('already used'),
+      );
+      dupValue = isDup ? 'Duplicate found' : 'No duplicates — validity confirmed';
+      dupPassed = !isDup;
+      dupPercent = isDup ? 0.0 : 100.0;
+    }
+
+    // Amount match: only pass when real expected amount exists AND tolerance met
+    final hasRealAmount = st.amount > 0 && st.expectedAmount > 0;
+    final amountMatchValue = hasRealAmount
+        ? '${st.tolerancePercent.toStringAsFixed(1)}% difference'
+        : 'Pending';
+    final amountMatchPassed = hasRealAmount && st.tolerancePassed;
+    final amountMatchPercent = hasRealAmount ? (st.tolerancePassed ? 100.0 : 0.0) : 0.0;
+
+    // Date freshness — resolve immediately once the date check has run
+    String dateValue = st.transactionDate.isNotEmpty ? st.transactionDate : 'Pending';
+    String freshnessValue = 'Pending';
+    bool freshnessPassed = false;
+    double freshnessPercent = 0;
+    if (st.dateFreshnessNote.isNotEmpty) {
+      if (st.dateFreshnessPassed) {
+        freshnessValue = 'Fresh — ${st.dateFreshnessNote}';
+        freshnessPassed = true;
+        freshnessPercent = 100.0;
+      } else {
+        freshnessValue = st.dateFreshnessNote;
+        freshnessPassed = false;
+        freshnessPercent = 0.0;
+      }
+    } else if (st.transactionDate.isNotEmpty) {
+      // Date is set but check hasn't run yet
+      freshnessValue = 'Pending (date: ${st.transactionDate})';
     }
 
     return [
-      _StepData(
-        icon: Icons.account_balance_rounded,
+      _StepData(icon: Icons.account_balance_rounded,
         label: 'Detect payment method',
         value: st.selectedBank ?? 'Pending',
-        passed: st.selectedBank != null,
-        percent: 100,
-      ),
-      _StepData(
-        icon: Icons.receipt_rounded,
+        passed: data(st.selectedBank != null),
+        percent: data(st.selectedBank != null) ? 100.0 : 0.0),
+      _StepData(icon: Icons.person_outline_rounded,
+        label: 'Customer name',
+        value: st.buyerName.isNotEmpty ? st.buyerName : 'Pending',
+        passed: data(st.buyerName.isNotEmpty),
+        percent: data(st.buyerName.isNotEmpty) ? 100.0 : 0.0),
+      _StepData(icon: Icons.receipt_rounded,
         label: 'Fetch receipt page',
         value: st.referenceCode.isNotEmpty ? 'TX: ${st.referenceCode}' : 'Pending',
-        passed: st.referenceCode.isNotEmpty,
-        percent: st.referenceCode.isNotEmpty ? 100 : 0,
-      ),
-      _StepData(
-        icon: Icons.monetization_on_rounded,
+        passed: v && st.referenceCode.isNotEmpty && RegExp(r'\d').hasMatch(st.referenceCode),
+        percent: v && st.referenceCode.isNotEmpty && RegExp(r'\d').hasMatch(st.referenceCode) ? 100.0 : 0.0),
+      _StepData(icon: Icons.monetization_on_rounded,
         label: 'Extract amount',
         value: st.amount > 0
             ? '${st.amount.toStringAsFixed(0)} ETB${st.expectedAmount > 0 ? ' (expected: ${st.expectedAmount.toStringAsFixed(0)} ETB)' : ''}'
             : 'Pending',
-        passed: st.amount > 0,
-        percent: st.amount > 0 ? 100 : 0,
-      ),
-      _StepData(
-        icon: Icons.compare_arrows_rounded,
+        passed: data(st.amount > 0),
+        percent: data(st.amount > 0) ? 100.0 : 0.0),
+      _StepData(icon: Icons.compare_arrows_rounded,
         label: 'Amount match (5% tolerance)',
-        value: st.amount > 0 && st.expectedAmount > 0
-            ? '${st.tolerancePercent.toStringAsFixed(1)}% difference'
-            : 'Pending',
-        passed: st.tolerancePassed,
-        percent: st.amount > 0 ? ((1 - st.tolerancePercent / 100) * 100).clamp(0.0, 100.0).roundToDouble() : 0,
-      ),
-      _StepData(
-        icon: Icons.credit_card_rounded,
+        value: amountMatchValue,
+        passed: v ? amountMatchPassed : false,
+        percent: v ? amountMatchPercent : 0.0),
+      _StepData(icon: Icons.credit_card_rounded,
         label: 'Extract receiver account',
         value: st.receiverAccount.isNotEmpty ? st.receiverAccount : 'Pending',
-        passed: st.receiverAccount.isNotEmpty,
-        percent: st.receiverAccount.isNotEmpty ? 100 : 0,
-      ),
-      _StepData(
-        icon: Icons.compare_arrows_rounded,
+        passed: data(st.receiverAccount.isNotEmpty),
+        percent: data(st.receiverAccount.isNotEmpty) ? 100.0 : 0.0),
+      _StepData(icon: Icons.compare_arrows_rounded,
         label: 'Receiver account match',
         value: accMatchValue,
         detail: accMatchPercent > 0 ? 'Match: ${accMatchPercent.toStringAsFixed(0)}%' : null,
         passed: accMatchPassed,
-        percent: accMatchPercent,
-      ),
-      _StepData(
-        icon: Icons.calendar_today_rounded,
+        percent: accMatchPercent),
+      _StepData(icon: Icons.calendar_today_rounded,
         label: 'Transaction date',
-        value: st.transactionDate.isNotEmpty ? st.transactionDate : 'Pending',
-        passed: st.transactionDate.isNotEmpty,
-        percent: st.transactionDate.isNotEmpty ? 100 : 0,
-      ),
-      _StepData(
-        icon: Icons.verified_user_rounded,
+        value: dateValue,
+        passed: data(st.transactionDate.isNotEmpty),
+        percent: data(st.transactionDate.isNotEmpty) ? 100.0 : 0.0),
+      _StepData(icon: Icons.access_time_rounded,
+        label: 'Date freshness',
+        value: freshnessValue,
+        passed: freshnessPassed,
+        percent: freshnessPercent),
+      _StepData(icon: Icons.verified_user_rounded,
         label: 'Duplicate check',
-        value: isVerified
-            ? (isDuplicate ? 'Duplicate found' : 'No duplicates \u2014 validity confirmed')
-            : 'Pending verification',
-        passed: isVerified && !isDuplicate,
-        percent: isVerified ? (isDuplicate ? 0 : 100) : 0,
-      ),
+        value: dupValue,
+        passed: v && dupPassed,
+        percent: v ? dupPercent : 0.0),
     ];
   }
 }
@@ -871,11 +929,16 @@ class _StepRow extends StatelessWidget {
 }
 
 class _BankDropdown extends StatelessWidget {
-  const _BankDropdown(
-      {this.value, required this.onChanged, required this.isDark});
+  const _BankDropdown({
+    this.value,
+    required this.onChanged,
+    required this.isDark,
+    this.activeBanks = const {},
+  });
   final String? value;
   final void Function(String) onChanged;
   final bool isDark;
+  final Set<String> activeBanks;
 
   @override
   Widget build(BuildContext context) {
@@ -890,6 +953,14 @@ class _BankDropdown extends StatelessWidget {
     final textColor =
         isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
+    final items = BankName.values.where((b) {
+      if (activeBanks.isEmpty) return true;
+      return activeBanks.any((ab) =>
+          ab.toLowerCase().contains(b.displayName.toLowerCase()) ||
+          b.displayName.toLowerCase().contains(ab.toLowerCase()) ||
+          b.shortName.toLowerCase().contains(ab.toLowerCase()));
+    }).toList();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
@@ -898,13 +969,13 @@ class _BankDropdown extends StatelessWidget {
           border: Border.all(color: borderColor)),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: value,
+          value: items.any((b) => b.displayName == value) ? value : null,
           hint: Text('Select bank or wallet',
               style: GoogleFonts.inter(color: hintColor, fontSize: 14)),
           isExpanded: true,
           dropdownColor: dropdownBg,
           icon: Icon(Icons.keyboard_arrow_down_rounded, color: iconColor),
-          items: BankName.values
+          items: items
               .map((b) => DropdownMenuItem(
                   value: b.displayName,
                   child: Text(b.displayName,

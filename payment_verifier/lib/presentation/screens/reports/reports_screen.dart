@@ -56,6 +56,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
     final metricsAsync = ref.watch(dashboardMetricsProvider);
+    final weeklyAsync = ref.watch(weeklyTotalsProvider);
     final isAdmin = ref.watch(isAdminProvider);
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
@@ -131,13 +132,18 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                   textPrimary: textPrimary,
                   textSecondary: textSecondary,
                   borderColor: borderColor,
-                  child: AnimatedBuilder(
-                    animation: _progress,
-                    builder: (_, __) => _RevenueLineChart(
-                      period: _period,
-                      progress: _progress.value,
-                      isDark: isDark,
+                  child: weeklyAsync.when(
+                    data: (weekly) => AnimatedBuilder(
+                      animation: _progress,
+                      builder: (_, __) => _RevenueLineChart(
+                        period: _period,
+                        progress: _progress.value,
+                        isDark: isDark,
+                        weeklyTotals: weekly,
+                      ),
                     ),
+                    loading: () => const SizedBox(height: 160),
+                    error: (_, __) => const SizedBox(height: 160),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -151,13 +157,18 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                   textPrimary: textPrimary,
                   textSecondary: textSecondary,
                   borderColor: borderColor,
-                  child: AnimatedBuilder(
-                    animation: _progress,
-                    builder: (_, __) => _TipsBarChart(
-                      period: _period,
-                      progress: _progress.value,
-                      isDark: isDark,
+                  child: weeklyAsync.when(
+                    data: (weekly) => AnimatedBuilder(
+                      animation: _progress,
+                      builder: (_, __) => _TipsBarChart(
+                        period: _period,
+                        progress: _progress.value,
+                        isDark: isDark,
+                        weeklyTotals: weekly,
+                      ),
                     ),
+                    loading: () => const SizedBox(height: 160),
+                    error: (_, __) => const SizedBox(height: 160),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -456,14 +467,19 @@ class _RevenueLineChart extends StatelessWidget {
     required this.period,
     required this.progress,
     required this.isDark,
+    this.weeklyTotals = const {},
   });
 
   final String period;
   final double progress;
   final bool isDark;
+  final Map<String, double> weeklyTotals;
 
   List<FlSpot> get _spots {
-    // Mock data adjusted per period
+    if (period == 'Weekly' && weeklyTotals.isNotEmpty) {
+      final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return List.generate(7, (i) => FlSpot(i.toDouble(), (weeklyTotals[dayNames[i]] ?? 0) * progress));
+    }
     final raw = period == 'Daily'
         ? [0.3, 0.5, 0.4, 0.8, 0.6, 0.9, 0.7, 1.0, 0.85, 0.75]
         : period == 'Monthly'
@@ -577,24 +593,35 @@ class _TipsBarChart extends StatelessWidget {
     required this.period,
     required this.progress,
     required this.isDark,
+    this.weeklyTotals = const {},
   });
 
   final String period;
   final double progress;
   final bool isDark;
+  final Map<String, double> weeklyTotals;
 
   @override
   Widget build(BuildContext context) {
-    final raw = period == 'Daily'
-        ? [120.0, 180.0, 90.0, 240.0, 160.0, 300.0, 210.0]
-        : period == 'Monthly'
-            ? [800.0, 1200.0, 950.0, 1400.0, 1100.0, 1600.0, 1350.0, 1800.0, 1500.0, 2000.0, 1700.0, 2200.0]
-            : [600.0, 850.0, 720.0, 1100.0, 980.0, 1400.0, 1200.0];
-    final labels = period == 'Daily'
-        ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-        : period == 'Monthly'
-            ? ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
-            : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    List<double> raw;
+    List<String> labels;
+
+    if (period == 'Weekly' && weeklyTotals.isNotEmpty) {
+      raw = dayNames.map((d) => weeklyTotals[d] ?? 0).toList();
+      labels = dayNames;
+    } else {
+      raw = period == 'Daily'
+          ? [120.0, 180.0, 90.0, 240.0, 160.0, 300.0, 210.0]
+          : period == 'Monthly'
+              ? [800.0, 1200.0, 950.0, 1400.0, 1100.0, 1600.0, 1350.0, 1800.0, 1500.0, 2000.0, 1700.0, 2200.0]
+              : [600.0, 850.0, 720.0, 1100.0, 980.0, 1400.0, 1200.0];
+      labels = period == 'Daily'
+          ? dayNames
+          : period == 'Monthly'
+              ? ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+              : dayNames;
+    }
     final maxVal = raw.reduce(math.max);
 
     return SizedBox(

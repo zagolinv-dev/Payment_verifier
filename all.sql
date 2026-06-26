@@ -128,3 +128,27 @@ create policy "Authenticated can view reset requests" on public.password_reset_r
 drop policy if exists "Authenticated can update reset requests" on public.password_reset_requests;
 create policy "Authenticated can update reset requests" on public.password_reset_requests
   for update to authenticated using (true) with check (true);
+
+-- ===== VERIFICATION ATTEMPTS TRACKING =====
+
+create table if not exists public.verification_attempts (
+  id uuid not null default gen_random_uuid() primary key,
+  reference_code text not null default '',
+  amount decimal(10,2) not null default 0,
+  receiver_account text not null default '',
+  transaction_date text not null default '',
+  bank_name text not null default '',
+  buyer_name text not null default '',
+  failure_reason text not null default '',
+  attempt_count int not null default 1,
+  verified_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.verification_attempts enable row level security;
+drop policy if exists "Authenticated can insert attempts" on public.verification_attempts;
+create policy "Authenticated can insert attempts" on public.verification_attempts
+  for insert to authenticated with check (true);
+drop policy if exists "Authenticated can view attempts" on public.verification_attempts;
+create policy "Authenticated can view attempts" on public.verification_attempts
+  for select to authenticated using (true);

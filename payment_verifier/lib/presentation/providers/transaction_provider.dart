@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:payment_verifier/data/datasources/supabase_notification_datasource.dart';
 import 'package:payment_verifier/data/datasources/supabase_transaction_datasource.dart';
@@ -89,6 +90,12 @@ final dashboardMetricsProvider =
   return repo.getDashboardMetrics();
 });
 
+final weeklyTotalsProvider =
+    FutureProvider.autoDispose<Map<String, double>>((ref) async {
+  final repo = ref.watch(transactionRepositoryProvider);
+  return repo.getWeeklyTotals();
+});
+
 class ReceiptVerification {
   final bool ownerNameMatch;
   final bool amountValid;
@@ -125,6 +132,17 @@ class VerifyState {
     this.receiptImage,
     this.verification,
     this.isVerifying = false,
+    this.accountMatchPassed = false,
+    this.accountMatchNote = '',
+    this.ocrCompleted = false,
+    this.duplicateCheckPassed = false,
+    this.duplicateCheckNote = '',
+    this.hasVerified = false,
+    this.attemptCount = 0,
+    this.maxAttempts = 3,
+    this.dateFreshnessPassed = false,
+    this.dateFreshnessNote = '',
+    this.showFinalRejected = false,
   });
 
   final String? selectedBank;
@@ -142,6 +160,17 @@ class VerifyState {
   final String? receiptImage;
   final ReceiptVerification? verification;
   final bool isVerifying;
+  final bool accountMatchPassed;
+  final String accountMatchNote;
+  final bool ocrCompleted;
+  final bool duplicateCheckPassed;
+  final String duplicateCheckNote;
+  final bool hasVerified;
+  final int attemptCount;
+  final int maxAttempts;
+  final bool dateFreshnessPassed;
+  final String dateFreshnessNote;
+  final bool showFinalRejected;
 
   double get tolerancePercent {
     if (expectedAmount <= 0 || amount <= 0) return 0;
@@ -152,10 +181,8 @@ class VerifyState {
 
   bool get canVerify =>
       selectedBank != null &&
-      orderTotal > 0 &&
-      amount > 0 &&
       receiptImage != null &&
-      buyerName.isNotEmpty;
+      referenceCode.isNotEmpty;
 
   VerifyState copyWith({
     String? selectedBank,
@@ -173,6 +200,16 @@ class VerifyState {
     String? receiptImage,
     ReceiptVerification? verification,
     bool? isVerifying,
+    bool? accountMatchPassed,
+    String? accountMatchNote,
+    bool? ocrCompleted,
+    bool? duplicateCheckPassed,
+    String? duplicateCheckNote,
+    bool? hasVerified,
+    int? attemptCount,
+    bool? dateFreshnessPassed,
+    String? dateFreshnessNote,
+    bool? showFinalRejected,
     bool clearResult = false,
     bool clearError = false,
   }) {
@@ -192,6 +229,16 @@ class VerifyState {
       receiptImage: receiptImage ?? this.receiptImage,
       verification: verification ?? this.verification,
       isVerifying: isVerifying ?? this.isVerifying,
+      accountMatchPassed: accountMatchPassed ?? this.accountMatchPassed,
+      accountMatchNote: accountMatchNote ?? this.accountMatchNote,
+      ocrCompleted: ocrCompleted ?? this.ocrCompleted,
+      duplicateCheckPassed: duplicateCheckPassed ?? this.duplicateCheckPassed,
+      duplicateCheckNote: duplicateCheckNote ?? this.duplicateCheckNote,
+      hasVerified: hasVerified ?? this.hasVerified,
+      attemptCount: attemptCount ?? this.attemptCount,
+      dateFreshnessPassed: dateFreshnessPassed ?? this.dateFreshnessPassed,
+      dateFreshnessNote: dateFreshnessNote ?? this.dateFreshnessNote,
+      showFinalRejected: showFinalRejected ?? this.showFinalRejected,
     );
   }
 }
@@ -270,10 +317,90 @@ FraudDetectionResult analyzeFraudRisk({
   );
 }
 
+// Date parsing helpers ------------------------------------------------
+
+/// Parse a receipt date string into a [DateTime]. Returns null on failure.
+DateTime? parseReceiptDate(String raw) {
+  final s = raw.trim();
+  // "Jun 24, 2026 01:11 PM"
+  final m1 = RegExp(
+    r'^([A-Z][a-z]{2,8})\s+(\d{1,2}),?\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([APap][Mm]?\.?)?)?',
+  ).firstMatch(s);
+  if (m1 != null) {
+    final months = {
+      'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+      'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+    };
+    final mon = months[m1.group(1)!.substring(0, 3).toLowerCase()];
+    if (mon == null) return null;
+    final day = int.parse(m1.group(2)!);
+    final year = int.parse(m1.group(3)!);
+    int h = int.parse(m1.group(4) ?? '0');
+    final min = int.parse(m1.group(5) ?? '0');
+    final sec = int.parse((m1.group(6) ?? '0'));
+    final ampm = (m1.group(7) ?? '').toUpperCase();
+    if (ampm.startsWith('P') && h < 12) h += 12;
+    if (ampm.startsWith('A') && h == 12) h = 0;
+    return DateTime(year, mon, day, h, min, sec);
+  }
+  // "19/06/2026, 21:10:59"  or  "2026/05/28 18:24:51"  or  "2026-05-04 16:24:49"
+  for (final sep in ['/', '/', '-']) {
+    final pattern = sep == '/'
+        ? r'^(\d{1,2})/(\d{1,2})/(\d{4})[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?'
+        : r'^(\d{4})-(\d{1,2})-(\d{1,2})[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?';
+    final m2 = RegExp(pattern).firstMatch(s);
+    if (m2 != null) {
+      final a = int.parse(m2.group(1)!);
+      final b = int.parse(m2.group(2)!);
+      final c = int.parse(m2.group(3)!);
+      final h = int.parse(m2.group(4)!);
+      final min = int.parse(m2.group(5)!);
+      final sec = int.parse((m2.group(6) ?? '0'));
+      if (sep == '-') {
+        return DateTime(a, b, c, h, min, sec);
+      } else {
+        // DD/MM/YYYY or MM/DD/YYYY — assume DD/MM/YYYY
+        return DateTime(c, b, a, h, min, sec);
+      }
+    }
+  }
+  // date-only with no time component
+  final m3 = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(s);
+  if (m3 != null) {
+    return DateTime(int.parse(m3.group(3)!), int.parse(m3.group(2)!), int.parse(m3.group(1)!));
+  }
+  final m4 = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(s);
+  if (m4 != null) {
+    return DateTime(int.parse(m4.group(1)!), int.parse(m4.group(2)!), int.parse(m4.group(3)!));
+  }
+  return null;
+}
+
+/// Check whether a receipt date is fresh enough to pass verification.
+/// Not in the future (2 min clock-skew allowance), not older than [maxAge].
+({bool passed, String note}) checkDateFreshness(String rawDate, {Duration maxAge = const Duration(hours: 24)}) {
+  if (rawDate.isEmpty) return (passed: false, note: 'unreadable date');
+  final dt = parseReceiptDate(rawDate);
+  if (dt == null) return (passed: false, note: 'unreadable date');
+  final now = DateTime.now();
+  final diff = now.difference(dt);
+  // Allow 2 minutes clock skew into the future
+  if (diff.isNegative && diff.abs().inMinutes > 2) {
+    return (passed: false, note: 'future-dated (${dt.toString().substring(0, 16)})');
+  }
+  if (diff > maxAge) {
+    final hours = diff.inHours;
+    return (passed: false, note: 'receipt too old ($hours hours ago, max ${maxAge.inHours}h)');
+  }
+  return (passed: true, note: 'fresh (${dt.toString().substring(0, 16)})');
+}
+
 class VerifyNotifier extends StateNotifier<VerifyState> {
-  VerifyNotifier(this._repo, this._notifDatasource) : super(const VerifyState());
+  VerifyNotifier(this._repo, this._notifDatasource, this._txDatasource)
+      : super(const VerifyState());
   final TransactionRepositoryImpl _repo;
   final SupabaseNotificationDatasource _notifDatasource;
+  final SupabaseTransactionDatasource _txDatasource;
 
   void setBank(String bank) => state = state.copyWith(selectedBank: bank);
   void setCode(String code) => state = state.copyWith(referenceCode: code);
@@ -286,6 +413,39 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     state = state.copyWith(amount: amt, tip: tip);
   }
   void setReceiptImage(String? path) => state = state.copyWith(receiptImage: path);
+  void setAccountMatch(bool passed, String note) => state = state.copyWith(accountMatchPassed: passed, accountMatchNote: note);
+  void setOcrCompleted() => state = state.copyWith(ocrCompleted: true);
+  void setAttemptCount(int n) => state = state.copyWith(attemptCount: n);
+  void setDateFreshness(bool passed, String note) => state = state.copyWith(dateFreshnessPassed: passed, dateFreshnessNote: note);
+
+  Future<void> checkDuplicate() async {
+    if (state.referenceCode.isEmpty) return;
+    try {
+      final existingTxs = await _repo.getTransactions();
+      final dup = existingTxs.where((t) => t.referenceCode == state.referenceCode).toList();
+      if (dup.isNotEmpty) {
+        final dates = dup.map((t) => t.createdAt.toString().substring(0, 10)).join(', ');
+        state = state.copyWith(
+          duplicateCheckPassed: false,
+          duplicateCheckNote: 'Already used on $dates',
+        );
+      } else {
+        state = state.copyWith(
+          duplicateCheckPassed: true,
+          duplicateCheckNote: 'No duplicate found — ready to verify',
+        );
+      }
+    } catch (_) {}
+  }
+
+  void runDateFreshnessCheck() {
+    if (state.transactionDate.isEmpty) {
+      state = state.copyWith(dateFreshnessPassed: false, dateFreshnessNote: 'unreadable date');
+      return;
+    }
+    final result = checkDateFreshness(state.transactionDate);
+    state = state.copyWith(dateFreshnessPassed: result.passed, dateFreshnessNote: result.note);
+  }
 
   void runLiveCheck() {
     if (state.selectedBank == null || state.amount <= 0) return;
@@ -319,51 +479,115 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       isLoading: true,
       clearResult: true,
       clearError: true,
+      hasVerified: true,
       selectedBank: bank,
       referenceCode: refCode,
     );
     try {
-      final existingTxs = await _repo.getTransactions();
-      final fraudAnalysis = analyzeFraudRisk(
-        amount: state.amount,
-        referenceCode: refCode,
-        bankName: bank,
-        buyerName: state.buyerName,
-        orderTotal: state.orderTotal,
-        existingTransactions: existingTxs,
-      );
-
-      final tx = await _repo.createTransaction(
-        bankName: bank,
-        referenceCode: refCode,
-        buyerName: state.buyerName.isEmpty ? 'Unknown Buyer' : state.buyerName,
-        amount: state.amount,
-        tip: state.tip,
-        imageUrl: state.receiptImage,
-        riskScore: fraudAnalysis.riskScore,
-        riskFlags: fraudAnalysis.flags,
-        orderTotal: state.orderTotal,
-        status: fraudAnalysis.suggestedStatus.value,
-      );
-
-      if (fraudAnalysis.riskScore >= 0.3) {
-        await _notifDatasource.createNotification(
-          type: fraudAnalysis.riskScore >= 0.7 ? 'alert' : 'warning',
-          title: fraudAnalysis.suggestedStatus == TransactionStatus.fraudSuspected
-              ? 'Fraud Suspected'
-              : fraudAnalysis.suggestedStatus == TransactionStatus.duplicate
-                  ? 'Duplicate Detected'
-                  : 'Needs Review',
-          message: fraudAnalysis.flags.isNotEmpty ? fraudAnalysis.flags.first : 'Transaction flagged',
-          transactionId: tx.id,
-          amount: state.amount,
-        );
-      }
-
-      state = state.copyWith(isLoading: false, result: tx);
+      await _doVerify().timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      _handleFailure('Fetch receipt page timed out after 10s', waiterName);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      _handleFailure(e.toString(), waiterName);
     }
+  }
+
+  void _handleFailure(String errorMsg, String? waiterName) {
+    final attempt = state.attemptCount + 1;
+    if (attempt >= state.maxAttempts) {
+      // 3rd failure — final reject
+      _recordInvalidAttempt(errorMsg, attempt);
+      state = state.copyWith(
+        isLoading: false,
+        error: 'This receipt is not valid',
+        attemptCount: attempt,
+        showFinalRejected: true,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Scan failed — please scan again ($attempt/${state.maxAttempts})',
+        attemptCount: attempt,
+      );
+    }
+  }
+
+  Future<void> _recordInvalidAttempt(String reason, int attempt) async {
+    try {
+      await _txDatasource.recordInvalidAttempt(
+        referenceCode: state.referenceCode,
+        amount: state.amount,
+        receiverAccount: state.receiverAccount,
+        transactionDate: state.transactionDate,
+        bankName: state.selectedBank ?? '',
+        buyerName: state.buyerName,
+        failureReason: reason,
+        attemptCount: attempt,
+      );
+      print('[Verify] invalid attempt #$attempt recorded: $reason');
+    } catch (e) {
+      print('[Verify] failed to record invalid attempt: $e');
+    }
+  }
+
+  Future<void> _doVerify() async {
+    final bank = state.selectedBank ?? 'Telebirr';
+    final refCode = state.referenceCode;
+
+    // Run freshness check
+    runDateFreshnessCheck();
+
+    final existingTxs = await _repo.getTransactions();
+    final fraudAnalysis = analyzeFraudRisk(
+      amount: state.amount,
+      referenceCode: refCode,
+      bankName: bank,
+      buyerName: state.buyerName,
+      orderTotal: state.orderTotal,
+      existingTransactions: existingTxs,
+    );
+    final flags = [...fraudAnalysis.flags];
+    if (!state.accountMatchPassed && state.receiverAccount.isNotEmpty) {
+      flags.insert(0, 'Receiver account mismatch: ${state.accountMatchNote}');
+    }
+    if (state.accountMatchPassed && state.receiverAccount.isNotEmpty) {
+      flags.insert(0, 'Receiver account verified: ${state.accountMatchNote}');
+    }
+    if (!state.dateFreshnessPassed && state.transactionDate.isNotEmpty) {
+      flags.insert(0, 'Date freshness: ${state.dateFreshnessNote}');
+    }
+
+    print('[Verify] amount=${state.amount} ref=$refCode receiver=${state.receiverAccount} date=${state.transactionDate} attempts=${state.attemptCount + 1}');
+
+    final tx = await _repo.createTransaction(
+      bankName: bank,
+      referenceCode: refCode,
+      buyerName: state.buyerName.isEmpty ? 'Unknown Buyer' : state.buyerName,
+      amount: state.amount,
+      tip: state.tip,
+      imageUrl: state.receiptImage,
+      riskScore: fraudAnalysis.riskScore,
+      riskFlags: flags,
+      orderTotal: state.orderTotal,
+      status: fraudAnalysis.suggestedStatus.value,
+    );
+
+    if (fraudAnalysis.riskScore >= 0.3) {
+      await _notifDatasource.createNotification(
+        type: fraudAnalysis.riskScore >= 0.7 ? 'alert' : 'warning',
+        title: fraudAnalysis.suggestedStatus == TransactionStatus.fraudSuspected
+            ? 'Fraud Suspected'
+            : fraudAnalysis.suggestedStatus == TransactionStatus.duplicate
+                ? 'Duplicate Detected'
+                : 'Needs Review',
+        message: fraudAnalysis.flags.isNotEmpty ? fraudAnalysis.flags.first : 'Transaction flagged',
+        transactionId: tx.id,
+        amount: state.amount,
+      );
+    }
+
+    // Success — reset attempt counter
+    state = state.copyWith(isLoading: false, result: tx, attemptCount: 0);
   }
 
   void reset() => state = const VerifyState();
@@ -374,5 +598,6 @@ final verifyProvider =
   return VerifyNotifier(
     ref.watch(transactionRepositoryProvider),
     SupabaseNotificationDatasource(ref.watch(supabaseClientProvider)),
+    ref.watch(transactionDatasourceProvider),
   );
 });
