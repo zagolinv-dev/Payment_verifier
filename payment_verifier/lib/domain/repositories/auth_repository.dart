@@ -5,7 +5,7 @@ abstract class AuthRepository {
   Stream<AuthState> get authStateChanges;
   Future<UserProfileEntity?> getCurrentUser();
   Future<UserProfileEntity> signIn({required String email, required String password});
-  Future<UserProfileEntity> signUp({required String email, required String password, String? fullName, String? phone, String? ownerName, String? address, String? description});
+  Future<UserProfileEntity> signUp({required String email, required String password, String? fullName, String? role, String? phone, String? ownerName, String? address, String? description});
   Future<void> signOut();
   Future<void> resetPassword(String email);
 }

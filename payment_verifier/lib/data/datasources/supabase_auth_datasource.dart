@@ -31,6 +31,7 @@ class SupabaseAuthDatasource {
     required String email,
     required String password,
     String? fullName,
+    String? role = 'ADMIN',
     String? phone,
     String? ownerName,
     String? address,
@@ -41,7 +42,7 @@ class SupabaseAuthDatasource {
       password: password,
       data: {
         'full_name': fullName,
-        'role': 'ADMIN',
+        'role': role,
         'phone': phone,
         'owner_name': ownerName,
         'address': address,

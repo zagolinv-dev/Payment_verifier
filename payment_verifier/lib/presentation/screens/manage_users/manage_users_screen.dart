@@ -217,13 +217,6 @@ class _UserCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 RoleBadge(role: user.role),
-                if (!isCurrentUser) ...[
-                  const SizedBox(height: 6),
-                  GestureDetector(
-                    onTap: () => _showRoleDialog(context),
-                    child: Text('Change role', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.primaryGreen, fontWeight: FontWeight.w500)),
-                  ),
-                ],
                 if (!user.isAdmin && onTap != null) ...[
                   const SizedBox(height: 4),
                   Row(
@@ -466,7 +459,7 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
 
     setState(() => _isLoading = true);
 
-    final success = await ref.read(userManagementProvider.notifier).addWaiter(
+    final errorMsg = await ref.read(userManagementProvider.notifier).addWaiter(
           fullName: _nameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
@@ -475,7 +468,7 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
     setState(() => _isLoading = false);
 
     if (mounted) {
-      if (success) {
+      if (errorMsg == null) {
         ref.invalidate(usersListProvider);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -486,8 +479,8 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
         Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to add waiter. Please try again.'),
+          SnackBar(
+            content: Text(errorMsg, style: GoogleFonts.inter(color: Colors.white)),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -506,7 +499,7 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom),
+          padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom + MediaQuery.of(context).padding.bottom),
           child: Form(
             key: _formKey,
             child: Column(

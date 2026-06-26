@@ -372,7 +372,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
 
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Container(
-      padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom),
+      padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom + MediaQuery.of(context).padding.bottom),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),

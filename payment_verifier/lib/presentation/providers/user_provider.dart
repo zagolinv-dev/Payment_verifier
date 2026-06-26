@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:payment_verifier/data/datasources/supabase_auth_datasource.dart';
 import 'package:payment_verifier/data/datasources/supabase_user_datasource.dart';
@@ -29,17 +30,18 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<bool> addWaiter({
+  Future<String?> addWaiter({
     required String fullName,
     required String email,
     required String password,
   }) async {
     try {
       final authDs = SupabaseAuthDatasource(Supabase.instance.client);
-      await authDs.signUp(email: email, password: password, fullName: fullName);
-      return true;
-    } catch (_) {
-      return false;
+      await authDs.signUp(email: email, password: password, fullName: fullName, role: 'WAITRESS');
+      return null;
+    } catch (e) {
+      debugPrint('[addWaiter Error] $e');
+      return e.toString().replaceFirst('Exception: ', '');
     }
   }
 
