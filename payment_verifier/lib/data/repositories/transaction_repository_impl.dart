@@ -78,4 +78,8 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<Map<String, double>> getWeeklyTotals() =>
       _datasource.getWeeklyTotals();
+
+  @override
+  Future<void> clearAllTransactions() =>
+      _datasource.clearAllTransactions();
 }

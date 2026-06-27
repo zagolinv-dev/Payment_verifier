@@ -42,6 +42,9 @@ abstract class TransactionRepository {
 
   /// Weekly totals grouped by day (Mon-Sun)
   Future<Map<String, double>> getWeeklyTotals();
+
+  /// Delete all transactions (admin only)
+  Future<void> clearAllTransactions();
 }
 
 class DashboardMetrics {

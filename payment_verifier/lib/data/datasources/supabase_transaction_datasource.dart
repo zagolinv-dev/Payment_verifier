@@ -193,4 +193,11 @@ class SupabaseTransactionDatasource {
       'created_at': DateTime.now().toIso8601String(),
     });
   }
+
+  Future<void> clearAllTransactions() async {
+    await _client
+        .from(AppConstants.transactionsTable)
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // deletes all rows
+  }
 }

@@ -109,6 +109,23 @@ class DashboardScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
+                    if (isAdmin) ...[
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: IconButton(
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 22),
+                          color: textSecondary,
+                          onPressed: () => _showClearDataDialog(context, ref),
+                          tooltip: 'Clear all data',
+                          style: IconButton.styleFrom(
+                            backgroundColor: card,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: borderColor)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -375,6 +392,109 @@ Future<void> _showCleanupDialog(BuildContext context, WidgetRef ref, List<Transa
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
+    }
+  }
+}
+
+Future<void> _showClearDataDialog(BuildContext context, WidgetRef ref) async {
+  final isDark = ref.read(themeProvider) == ThemeMode.dark;
+  final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
+  final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+  final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
+  final confirmed = await showBlurredDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64, height: 64,
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 32),
+          ),
+          const SizedBox(height: 20),
+          Text('Clear All Data?', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimary)),
+          const SizedBox(height: 12),
+          Text(
+            'This will permanently delete ALL transactions, notifications, and verification attempts from the server. This action cannot be undone.',
+            style: GoogleFonts.inter(fontSize: 14, color: textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'All receipts, scanned images, and KPI history will be lost forever.',
+                    style: GoogleFonts.inter(fontSize: 12, color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary, fontWeight: FontWeight.w600)),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.pop(ctx, true),
+          icon: const Icon(Icons.delete_forever_rounded, size: 18, color: Colors.white),
+          label: Text('Yes, Clear Everything', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: Colors.white)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed == true && context.mounted) {
+    try {
+      await ref.read(transactionRepositoryProvider).clearAllTransactions();
+      ref.invalidate(dashboardMetricsProvider);
+      ref.invalidate(recentTransactionsProvider);
+      ref.invalidate(transactionsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('All data cleared successfully.'),
+            backgroundColor: AppTheme.primaryGreen,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to clear data: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     }
   }
 }

@@ -158,18 +158,26 @@ class ReceiptPdfExport {
             if (txsWithImages.isNotEmpty) {
               pages.add(pw.SizedBox(height: 8));
               pages.add(
-                pw.Text(
-                  'Receipt Images:',
-                  style: pw.TextStyle(
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.grey700,
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                    ),
+                  ),
+                  child: pw.Text(
+                    'Receipt Images:',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.grey700,
+                    ),
                   ),
                 ),
               );
               pages.add(pw.SizedBox(height: 4));
 
-              // Show images in rows of 3
+              // Show images in rows of 3 with metadata captions
               for (int i = 0; i < txsWithImages.length; i += 3) {
                 final rowTxs = txsWithImages.sublist(i, (i + 3).clamp(0, txsWithImages.length));
                 final rowWidgets = <pw.Widget>[];
@@ -181,39 +189,54 @@ class ReceiptPdfExport {
                       final img = pw.MemoryImage(bytes);
                       rowWidgets.add(
                         pw.Expanded(
-                          child: pw.Column(
-                            children: [
-                              pw.Image(img, width: 80, height: 100, fit: pw.BoxFit.cover),
-                              pw.SizedBox(height: 2),
-                              pw.Text(
-                                tx.buyerName.length > 12
-                                    ? '${tx.buyerName.substring(0, 12)}...'
-                                    : tx.buyerName,
-                                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
-                                textAlign: pw.TextAlign.center,
-                              ),
-                            ],
+                          child: pw.Container(
+                            margin: const pw.EdgeInsets.only(right: 4),
+                            decoration: pw.BoxDecoration(
+                              border: pw.Border.all(color: PdfColors.grey200, width: 0.5),
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                            ),
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.center,
+                              children: [
+                                pw.ClipRect(
+                                  child: pw.Image(img, width: 100, height: 120, fit: pw.BoxFit.cover),
+                                ),
+                                pw.SizedBox(height: 3),
+                                pw.Text(
+                                  tx.referenceCode,
+                                  style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                                  textAlign: pw.TextAlign.center,
+                                ),
+                                pw.Text(
+                                  AppFormatters.formatETB(tx.amount),
+                                  style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+                                  textAlign: pw.TextAlign.center,
+                                ),
+                                pw.SizedBox(height: 3),
+                              ],
+                            ),
                           ),
                         ),
                       );
                     } else {
-                      rowWidgets.add(
-                        pw.Expanded(child: pw.Container()),
-                      );
+                      rowWidgets.add(pw.Expanded(child: pw.Container()));
                     }
                   } catch (_) {
-                    rowWidgets.add(
-                      pw.Expanded(child: pw.Container()),
-                    );
+                    rowWidgets.add(pw.Expanded(child: pw.Container()));
                   }
+                }
+                // Fill remaining slots in the row with empty containers
+                while (rowWidgets.length < 3) {
+                  rowWidgets.add(pw.Expanded(child: pw.Container()));
                 }
                 pages.add(
                   pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
+                    mainAxisAlignment: pw.MainAxisAlignment.start,
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: rowWidgets,
                   ),
                 );
-                pages.add(pw.SizedBox(height: 4));
+                pages.add(pw.SizedBox(height: 6));
               }
             }
 
