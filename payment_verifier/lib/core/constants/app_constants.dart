@@ -25,6 +25,9 @@ class AppConstants {
 
 enum BankName {
   cbe('Commercial Bank of Ethiopia', 'CBE'),
+  boa('Bank of Abyssinia', 'BOA'),
+  zemen('Zemen Bank', 'Zemen'),
+  dashen('Dashen Bank', 'Dashen'),
   telebirr('Telebirr', 'Telebirr'),
   cbeBirr('CBE Birr', 'CBE Birr'),
   awash('Awash Bank', 'Awash');
@@ -82,6 +85,9 @@ class PaymentValidators {
 
   static final Map<BankName, RegExp> referencePatterns = {
     BankName.cbe: RegExp(r'^FT[A-Z0-9]{10}$'),
+    BankName.boa: RegExp(r'^[A-Z0-9]{8,18}$'),
+    BankName.zemen: RegExp(r'^[A-Z0-9]{8,18}$'),
+    BankName.dashen: RegExp(r'^[A-Z0-9]{8,18}$'),
     BankName.telebirr: RegExp(r'^TLB[A-Z0-9]{8}$'),
     BankName.cbeBirr: RegExp(r'^CB[A-Z0-9]{10}$'),
     BankName.awash: RegExp(r'^AW[A-Z0-9]{10}$'),
@@ -97,6 +103,12 @@ class PaymentValidators {
     switch (bank) {
       case BankName.cbe:
         return 'e.g. FT123456789012';
+      case BankName.boa:
+        return 'e.g. BOA12345678';
+      case BankName.zemen:
+        return 'e.g. ZM1234567890';
+      case BankName.dashen:
+        return 'e.g. DS1234567890';
       case BankName.telebirr:
         return 'e.g. TLB12345678';
       case BankName.cbeBirr:

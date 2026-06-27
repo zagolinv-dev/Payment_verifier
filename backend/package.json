@@ -1,0 +1,12 @@
+{
+  "name": "payment-verifier-backend",
+  "version": "1.0.0",
+  "description": "Per-bank verification server for Ethiopian receipts",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

@@ -118,6 +118,8 @@ class ReceiptVerification {
 class VerifyState {
   const VerifyState({
     this.selectedBank,
+    this.ocrDetectedBank,
+    this.ocrRawText = '',
     this.referenceCode = '',
     this.buyerName = '',
     this.receiverName = '',
@@ -147,6 +149,8 @@ class VerifyState {
   });
 
   final String? selectedBank;
+  final String? ocrDetectedBank;
+  final String ocrRawText;
   final String referenceCode;
   final String buyerName;
   final String receiverName;
@@ -188,6 +192,8 @@ class VerifyState {
 
   VerifyState copyWith({
     String? selectedBank,
+    String? ocrDetectedBank,
+    String? ocrRawText,
     String? referenceCode,
     String? buyerName,
     String? receiverName,
@@ -218,6 +224,8 @@ class VerifyState {
   }) {
     return VerifyState(
       selectedBank: selectedBank ?? this.selectedBank,
+      ocrDetectedBank: ocrDetectedBank ?? this.ocrDetectedBank,
+      ocrRawText: ocrRawText ?? this.ocrRawText,
       referenceCode: referenceCode ?? this.referenceCode,
       buyerName: buyerName ?? this.buyerName,
       receiverName: receiverName ?? this.receiverName,
@@ -407,12 +415,17 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
   final SupabaseTransactionDatasource _txDatasource;
 
   void setBank(String bank) => state = state.copyWith(selectedBank: bank);
+  void setOcrDetectedBank(String bank) => state = state.copyWith(ocrDetectedBank: bank);
+  void setOcrRawText(String text) => state = state.copyWith(ocrRawText: text);
   void setCode(String code) => state = state.copyWith(referenceCode: code);
   void setBuyerName(String name) => state = state.copyWith(buyerName: name);
   void setReceiverName(String name) => state = state.copyWith(receiverName: name);
   void setReceiverAccount(String acct) => state = state.copyWith(receiverAccount: acct);
   void setTransactionDate(String date) => state = state.copyWith(transactionDate: date);
-  void setOrderTotal(double val) => state = state.copyWith(orderTotal: val, expectedAmount: val);
+  void setOrderTotal(double val) {
+    final t = state.amount > val ? state.amount - val : 0.0;
+    state = state.copyWith(orderTotal: val, expectedAmount: val, tip: t);
+  }
   void setAmount(double amt) {
     final tip = amt > state.orderTotal ? amt - state.orderTotal : 0.0;
     state = state.copyWith(amount: amt, tip: tip);
@@ -491,8 +504,18 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     try {
       await _doVerify(managerName: managerName, waiterName: waiterName).timeout(const Duration(seconds: 10));
     } on TimeoutException {
-      _handleFailure('Fetch receipt page timed out after 10s', waiterName);
+      state = state.copyWith(
+        accountMatchNote: 'could not confirm — check manually',
+        accountMatchPassed: false,
+        hasVerified: true,
+      );
+      _handleFailure('Fetch receipt page timed out after 10s — could not confirm', waiterName);
     } catch (e) {
+      state = state.copyWith(
+        accountMatchNote: 'could not confirm — check manually',
+        accountMatchPassed: false,
+        hasVerified: true,
+      );
       _handleFailure(e.toString(), waiterName);
     }
   }
@@ -554,6 +577,13 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     final flags = [...fraudAnalysis.flags];
 
     // ── Critical Failure Checks ─────────────────────────────────────────
+
+    // 0. Bank method mismatch — selected bank must match receipt
+    if (state.ocrDetectedBank != null && state.selectedBank != null &&
+        state.ocrDetectedBank != state.selectedBank) {
+      _handleFailure('Bank mismatch: receipt shows "${state.ocrDetectedBank}" but "${state.selectedBank}" was selected', waiterName);
+      return;
+    }
 
     // 1. Receiver account mismatch
     if (state.receiverAccount.isNotEmpty && !state.accountMatchPassed) {
