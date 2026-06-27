@@ -1,10 +1,26 @@
 import 'ocr_service.dart';
 
-/// State of a single verification step.
 enum VStepState { pass, fail, review }
 
-/// Overall verdict.
-enum Verdict { verified, review, rejected }
+/// looksGenuine = all local checks passed but NOT bank-confirmed (no Ethiopia
+/// backend). The cashier should still confirm the money landed.
+/// verified = bank-confirmed (only when a real fetch is wired in future).
+enum Verdict { verified, looksGenuine, review, rejected }
+
+extension VerdictLabel on Verdict {
+  String get label {
+    switch (this) {
+      case Verdict.verified:
+        return 'VERIFIED';
+      case Verdict.looksGenuine:
+        return 'LOOKS GENUINE — confirm receipt';
+      case Verdict.review:
+        return 'NEEDS REVIEW';
+      case Verdict.rejected:
+        return 'REJECTED';
+    }
+  }
+}
 
 class VStep {
   final String name;
@@ -17,11 +33,11 @@ class VStep {
 }
 
 class VerifyConfig {
-  final double? expectedAmount; // the café bill total
-  final List<String> businessAccounts; // your café's own account number(s), full
-  final String? businessName; // optional: café registered name for receiver-name match
+  final double? expectedAmount; // café bill total
+  final List<String> businessAccounts; // café's own account number(s), full
+  final String? businessName; // optional receiver-name match
   final Duration freshnessWindow; // default 24h
-  final double amountTolerance; // default 0.05 (5%)
+  final double amountTolerance; // default 5%
   const VerifyConfig({
     this.expectedAmount,
     this.businessAccounts = const [],
@@ -31,27 +47,17 @@ class VerifyConfig {
   });
 }
 
-/// Authoritative result from the provider lookup (your backend fetch).
+/// Authoritative bank lookup (future, needs Ethiopia hosting). Optional.
 class FetchResult {
   final bool found;
   final double? amount;
   final String? receiverAccount;
   final String? receiverName;
-  final String? error; // non-null => couldn't confirm (timeout/network/etc.)
-  const FetchResult({
-    this.found = false,
-    this.amount,
-    this.receiverAccount,
-    this.receiverName,
-    this.error,
-  });
+  final String? error;
+  const FetchResult({this.found = false, this.amount, this.receiverAccount, this.receiverName, this.error});
 }
 
-/// Inject your backend lookup. Return found:false with an error to mean
-/// "couldn't confirm" (e.g. timeout / not hosted in Ethiopia yet).
 typedef FetchReceipt = Future<FetchResult> Function(OcrResult ocr);
-
-/// Inject your DB check. Return the date it was used, or null if unused.
 typedef IsDuplicate = Future<DateTime?> Function(String reference);
 
 class VerifyResult {
@@ -64,28 +70,31 @@ class VerifyResult {
 
 class VerificationService {
   final VerifyConfig config;
-  final FetchReceipt? fetch;
+  final FetchReceipt? fetch; // optional; leave null until you have Ethiopia hosting
   final IsDuplicate? isDuplicate;
 
   VerificationService({required this.config, this.fetch, this.isDuplicate});
 
-  Future<VerifyResult> verify(OcrResult ocr) async {
+  /// [qrData] = text decoded from the receipt's QR (use mobile_scanner). Null if none.
+  Future<VerifyResult> verify(OcrResult ocr, {String? qrData}) async {
     final steps = <VStep>[];
-    bool hardReject = false; // clear fraud/invalid -> Rejected
-    bool review = false; // unconfirmed/soft issue -> Review
+    bool hardReject = false;
+    bool review = false;
     void reject() => hardReject = true;
     void needReview() => review = true;
+
+    final String? ref = ocr.reference == null ? null : normalizeFTReference(ocr.reference!);
 
     // 1) Payment method
     steps.add(ocr.paymentMethod != null
         ? VStep('Detect payment method', ocr.bankName ?? ocr.paymentMethod!, VStepState.pass)
         : _failR('Detect payment method', 'Unknown', needReview));
 
-    // 2) Status = success
+    // 2) Status
     if (ocr.status == 'success') {
       steps.add(const VStep('Status', 'Success', VStepState.pass));
     } else if (ocr.status == 'failed') {
-      steps.add(VStep('Status', 'Failed/declined', VStepState.fail));
+      steps.add(const VStep('Status', 'Failed/declined', VStepState.fail));
       reject();
     } else {
       steps.add(VStep('Status', ocr.status ?? 'unknown', VStepState.review));
@@ -97,41 +106,46 @@ class VerificationService {
         ? VStep('Customer name', ocr.customerName!, VStepState.pass)
         : _failR('Customer name', 'Not found', needReview));
 
-    // 4) Fetch receipt page (authoritative). Wrap your call in a 10s timeout.
-    FetchResult fr = const FetchResult(found: false, error: 'fetch not configured');
-    if (ocr.reference == null) {
-      steps.add(VStep('Fetch receipt page', 'No reference', VStepState.fail));
-      needReview();
-    } else if (fetch == null) {
-      steps.add(VStep('Fetch receipt page', 'TX ${ocr.reference} (not confirmed)', VStepState.review));
-      needReview();
-    } else {
+    // 4) QR consistency (in-app; no network). Strong fake signal if it mismatches.
+    final qr = _checkQr(ocr.paymentMethod, qrData, ref);
+    switch (qr) {
+      case _Qr.ok:
+        steps.add(const VStep('QR check', 'QR matches receipt ✓', VStepState.pass));
+        break;
+      case _Qr.mismatch:
+        steps.add(const VStep('QR check', 'QR does not match / not official', VStepState.fail));
+        reject(); // QR present but wrong = likely fake
+        break;
+      case _Qr.none:
+        steps.add(const VStep('QR check', 'No QR to check', VStepState.review));
+        break; // neutral: does not block looksGenuine
+    }
+
+    // 5) Optional authoritative fetch (only if wired + hosted in Ethiopia)
+    FetchResult fr = const FetchResult(found: false, error: 'no backend');
+    if (fetch != null && ref != null) {
       try {
         fr = await fetch!(ocr).timeout(const Duration(seconds: 10),
             onTimeout: () => const FetchResult(found: false, error: 'timeout'));
       } catch (e) {
         fr = FetchResult(found: false, error: e.toString());
       }
-      if (fr.found) {
-        steps.add(VStep('Fetch receipt page', 'Confirmed: ${ocr.reference}', VStepState.pass));
-      } else {
-        steps.add(VStep('Fetch receipt page', 'Could not confirm (${fr.error ?? "not found"})', VStepState.review));
-        needReview();
-      }
+      steps.add(fr.found
+          ? VStep('Bank confirmation', 'Confirmed: $ref', VStepState.pass)
+          : VStep('Bank confirmation', 'Not confirmed (${fr.error ?? "n/a"})', VStepState.review));
     }
     final bool authoritative = fr.found;
 
-    // Use authoritative values when available, else fall back to OCR.
     final double? amount = fr.amount ?? ocr.amountValue;
     final String? receiverAcct = fr.receiverAccount ?? ocr.receiverAccount;
     final String? receiverName = fr.receiverName ?? ocr.receiverName;
 
-    // 5) Extract amount
+    // 6) Extract amount
     steps.add(amount != null
         ? VStep('Extract amount', '${amount.toStringAsFixed(2)} ETB', VStepState.pass)
         : _failR('Extract amount', 'Not found', needReview));
 
-    // 6) Amount match (tolerance)
+    // 7) Amount match
     if (config.expectedAmount == null) {
       steps.add(const VStep('Amount match', 'No expected amount set', VStepState.review));
       needReview();
@@ -146,16 +160,16 @@ class VerificationService {
         steps.add(VStep('Amount match',
             '${(diff * 100).toStringAsFixed(1)}% diff (got ${amount.toStringAsFixed(2)}, expected ${config.expectedAmount})',
             VStepState.fail));
-        needReview(); // wrong amount -> owner decides (not auto-reject)
+        needReview();
       }
     }
 
-    // 7) Extract receiver account
+    // 8) Extract receiver account
     steps.add(receiverAcct != null
         ? VStep('Extract receiver account', receiverAcct, VStepState.pass)
         : _failR('Extract receiver account', 'Not found', needReview));
 
-    // 8) Receiver account match (to the café's own account)
+    // 9) Receiver account match (to café account)
     if (config.businessAccounts.isEmpty) {
       steps.add(const VStep('Receiver account match', 'Business account not set', VStepState.fail));
       needReview();
@@ -165,11 +179,11 @@ class VerificationService {
     } else if (_suffixMatch(receiverAcct, config.businessAccounts)) {
       steps.add(VStep('Receiver account match', '$receiverAcct ✓', VStepState.pass));
     } else {
-      steps.add(VStep('Receiver account match', '$receiverAcct vs café account — NO match', VStepState.fail));
-      reject(); // paid to someone else -> reject
+      steps.add(VStep('Receiver account match', '$receiverAcct — NOT your account', VStepState.fail));
+      reject(); // paid to someone else
     }
 
-    // 8b) Receiver name match (optional, if café name configured + name present)
+    // 9b) Receiver name match (optional)
     if (config.businessName != null && receiverName != null) {
       final ok = _nameMatch(receiverName, config.businessName!);
       steps.add(VStep('Receiver name match', ok ? '$receiverName ✓' : '$receiverName ≠ ${config.businessName}',
@@ -177,42 +191,43 @@ class VerificationService {
       if (!ok) needReview();
     }
 
-    // 9) Transaction date
+    // 10) Transaction date
     final dt = parseReceiptDate(ocr.date);
     steps.add(dt != null
         ? VStep('Transaction date', ocr.date!, VStepState.pass)
         : _failR('Transaction date', ocr.date ?? 'Not found', needReview));
 
-    // 10) Date freshness
+    // 11) Date freshness
     if (dt == null) {
       steps.add(const VStep('Date freshness', 'Unreadable date', VStepState.review));
       needReview();
     } else {
       final now = DateTime.now();
       if (dt.isAfter(now.add(const Duration(minutes: 2)))) {
-        steps.add(VStep('Date freshness', 'Future-dated', VStepState.fail));
+        steps.add(const VStep('Date freshness', 'Future-dated', VStepState.fail));
         reject();
       } else if (now.difference(dt) > config.freshnessWindow) {
-        final h = now.difference(dt).inHours;
-        steps.add(VStep('Date freshness', 'Too old (${h}h ago, max ${config.freshnessWindow.inHours}h)', VStepState.fail));
-        needReview(); // stale -> owner decides
+        steps.add(VStep('Date freshness',
+            'Too old (${now.difference(dt).inHours}h ago, max ${config.freshnessWindow.inHours}h)',
+            VStepState.fail));
+        needReview();
       } else {
         steps.add(const VStep('Date freshness', 'Fresh', VStepState.pass));
       }
     }
 
-    // 11) Duplicate check
-    if (ocr.reference == null) {
+    // 12) Duplicate check (uses normalized ref)
+    if (ref == null) {
       steps.add(const VStep('Duplicate check', 'No reference', VStepState.fail));
       needReview();
     } else if (isDuplicate == null) {
       steps.add(const VStep('Duplicate check', 'Not checked', VStepState.review));
       needReview();
     } else {
-      final usedOn = await isDuplicate!(ocr.reference!);
+      final usedOn = await isDuplicate!(ref);
       if (usedOn != null) {
         steps.add(VStep('Duplicate check', 'Already used on ${_d(usedOn)}', VStepState.fail));
-        reject(); // reused -> reject
+        reject();
       } else {
         steps.add(const VStep('Duplicate check', 'No duplicate', VStepState.pass));
       }
@@ -222,28 +237,56 @@ class VerificationService {
     Verdict verdict;
     if (hardReject) {
       verdict = Verdict.rejected;
-    } else if (review || !authoritative) {
-      verdict = Verdict.review; // not authoritatively confirmed -> needs owner
+    } else if (review) {
+      verdict = Verdict.review;
+    } else if (authoritative) {
+      verdict = Verdict.verified; // bank-confirmed
     } else {
-      verdict = Verdict.verified;
+      verdict = Verdict.looksGenuine; // all local checks passed, confirm receipt
     }
-    steps.add(VStep('Verdict', verdict.name.toUpperCase(),
-        verdict == Verdict.verified ? VStepState.pass
-            : verdict == Verdict.rejected ? VStepState.fail : VStepState.review));
+    steps.add(VStep('Verdict', verdict.label,
+        verdict == Verdict.rejected
+            ? VStepState.fail
+            : verdict == Verdict.review
+                ? VStepState.review
+                : VStepState.pass));
 
     // ignore: avoid_print
-    print('[Verify] verdict=$verdict passed=${steps.where((s) => s.passed).length}/${steps.length}');
+    print('[Verify] $verdict (${steps.where((s) => s.passed).length}/${steps.length} passed)');
     return VerifyResult(steps, verdict, ocr);
   }
 
-  // --- helpers ---------------------------------------------------------------
+  // --- QR consistency (no network) -------------------------------------------
+  _Qr _checkQr(String? bank, String? qrData, String? ref) {
+    if (qrData == null || qrData.trim().isEmpty) return _Qr.none;
+    final q = qrData.toLowerCase();
+    final domain = _qrDomain(bank);
+    if (domain != null && !q.contains(domain)) return _Qr.mismatch; // not official
+    if (ref != null && q.toUpperCase().contains(ref)) return _Qr.ok; // ref embedded in QR
+    return _Qr.none; // official-looking but ref not embedded -> can't confirm
+  }
+
+  String? _qrDomain(String? bank) {
+    switch (bank) {
+      case 'cbe':
+        return 'cbe.com.et';
+      case 'boa':
+        return 'abyssinia';
+      case 'telebirr':
+        return 'ethiotelecom';
+      case 'awash':
+        return 'awash';
+      default:
+        return null;
+    }
+  }
+
+  // --- matching helpers -------------------------------------------------------
   VStep _failR(String name, String value, void Function() onReview) {
     onReview();
     return VStep(name, value, VStepState.fail);
   }
 
-  /// Suffix match for masked accounts: receipt "1*****127" matches a stored
-  /// full account that ends in "127" (and starts with the visible head, if any).
   bool _suffixMatch(String masked, List<String> fulls) {
     final tail = RegExp(r'(\d{2,})\D*$').firstMatch(masked)?.group(1);
     final head = RegExp(r'^(\d+)').firstMatch(masked)?.group(1);
@@ -265,14 +308,13 @@ class VerificationService {
   String _2(int n) => n.toString().padLeft(2, '0');
 }
 
-/// Parse the four receipt date formats into a DateTime.
-///  "Jun 24, 2026 01:11 PM" | "19/06/2026, 21:10:59" |
-///  "2026/05/28 18:24:51"   | "2026-05-04 16:24:49"
+enum _Qr { ok, mismatch, none }
+
+/// Parse the receipt date formats into a DateTime.
 DateTime? parseReceiptDate(String? raw) {
   if (raw == null) return null;
   final s = raw.trim();
 
-  // Month-name: Jun 24, 2026 [01:11 PM]
   final mn = RegExp(
     r'([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([APap][Mm])?)?',
   ).firstMatch(s);
@@ -292,15 +334,14 @@ DateTime? parseReceiptDate(String? raw) {
     }
   }
 
-  // Numeric: dd/MM/yyyy or yyyy/MM/dd (and '-')
   final nm = RegExp(
     r'(\d{2,4})[/\-](\d{1,2})[/\-](\d{2,4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?',
   ).firstMatch(s);
   if (nm != null) {
     int a = int.parse(nm.group(1)!), b = int.parse(nm.group(2)!), c = int.parse(nm.group(3)!);
     int year, month, day;
-    if (a > 31) { year = a; month = b; day = c; } // yyyy/MM/dd
-    else { day = a; month = b; year = c; }        // dd/MM/yyyy
+    if (a > 31) { year = a; month = b; day = c; }
+    else { day = a; month = b; year = c; }
     if (year < 100) year += 2000;
     return DateTime(year, month, day, int.tryParse(nm.group(4) ?? '0') ?? 0,
         int.tryParse(nm.group(5) ?? '0') ?? 0, int.tryParse(nm.group(6) ?? '0') ?? 0);

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -84,9 +85,12 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
         ref.read(verifyProvider.notifier).setAmount(double.parse(result.amount!));
       }
 
-      // ── Resolve reference ───────────────────────────────────────────
+      // ── Resolve reference (normalise OCR letter↔digit swaps) ────────
       if (result.hasReference) {
-        ref.read(verifyProvider.notifier).setCode(result.reference!);
+        final normalized = normalizeFTReference(result.reference!);
+        ref.read(verifyProvider.notifier).setCode(normalized);
+        // Kick off the real backend fetch with retry logic.
+        ref.read(verifyProvider.notifier).fetchReceipt(normalized);
       }
 
       final bank = _mapPaymentMethodToBank(result.paymentMethod);
@@ -340,9 +344,9 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
               ),
             ),
           ),
-        ),
-      );
-    }
+      ),
+    );
+  }
 
     return Scaffold(
       backgroundColor: bg,
@@ -478,6 +482,20 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                   ),
                 ],
 
+                if (state.ocrCompleted) ...[
+                  const SizedBox(height: 12),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () => _showDetailsDialog(context, state),
+                      icon: Icon(Icons.info_outline_rounded, size: 18, color: AppTheme.primaryGreen),
+                      label: Text('View Details',
+                          style: GoogleFonts.inter(
+                              fontSize: 13, fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryGreen)),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 20),
                 AppTextField(
                   label: 'Customer Name',
@@ -575,6 +593,140 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
           ),
         ),
       ),
+    );
+  }
+
+  void _showDetailsDialog(BuildContext context, VerifyState st) {
+    final steps = _VerificationResult(
+      state: st,
+      textPrimary: Colors.white,
+      textSecondary: Colors.white70,
+      card: const Color(0xFF1E1E2C),
+      borderColor: const Color(0xFF2A2A3C),
+    )._buildSteps();
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Details',
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (ctx, anim1, anim2) {
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+            child: Center(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                constraints: const BoxConstraints(maxHeight: 600),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A2E),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.document_scanner_rounded,
+                                color: AppTheme.primaryGreen, size: 22),
+                            const SizedBox(width: 10),
+                            Text('Verification Details',
+                                style: GoogleFonts.outfit(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white)),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded,
+                                  color: Colors.white54, size: 22),
+                              onPressed: () => Navigator.of(ctx).pop(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text('${steps.where((s) => s.passed).length}/${steps.length} passed',
+                            style: GoogleFonts.inter(
+                                fontSize: 12, color: Colors.white54)),
+                        const SizedBox(height: 16),
+                        ...steps.asMap().entries.map((e) => Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: _StepRow(
+                                  step: e.value,
+                                  textSecondary: Colors.white54,
+                                  isLast: e.key == steps.length - 1),
+                            )),
+
+                        ...[
+                          const Divider(color: Colors.white12, height: 24),
+                          Text('Extracted Data',
+                              style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white)),
+                          const SizedBox(height: 8),
+                          _ExtractedField(label: 'Customer Name',
+                              value: st.buyerName.isNotEmpty ? st.buyerName : 'Not found',
+                              textSecondary: Colors.white54),
+                          _ExtractedField(label: 'Amount',
+                              value: st.amount > 0 ? '${st.amount.toStringAsFixed(2)} ETB' : 'Not found',
+                              textSecondary: Colors.white54),
+                          _ExtractedField(label: 'Reference',
+                              value: st.referenceCode.isNotEmpty ? st.referenceCode : 'Not found',
+                              textSecondary: Colors.white54),
+                          _ExtractedField(label: 'Bank (OCR)',
+                              value: st.ocrDetectedBank ?? 'Not detected',
+                              textSecondary: Colors.white54),
+                          _ExtractedField(label: 'Bank (Selected)',
+                              value: st.selectedBank ?? 'None',
+                              textSecondary: Colors.white54),
+                          _ExtractedField(label: 'Receiver Account',
+                              value: st.receiverAccount.isNotEmpty ? st.receiverAccount : 'Not found',
+                              textSecondary: Colors.white54),
+                          _ExtractedField(label: 'Transaction Date',
+                              value: st.transactionDate.isNotEmpty ? st.transactionDate : 'Not found',
+                              textSecondary: Colors.white54),
+                          _ExtractedField(label: 'Order Total',
+                              value: st.orderTotal > 0 ? '${st.orderTotal.toStringAsFixed(2)} ETB' : 'Not set',
+                              textSecondary: Colors.white54),
+                        ],
+                        if (st.ocrRawText.isNotEmpty) ...[
+                          const Divider(color: Colors.white12, height: 24),
+                          Text('Full OCR Text',
+                              style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white)),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.black26,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: SelectableText(st.ocrRawText,
+                                style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 11,
+                                    color: Colors.white70,
+                                    height: 1.5)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -747,6 +899,7 @@ class _VerificationResult extends StatelessWidget {
     final nameRaw = raw.isNotEmpty
         ? extractCustomerName(raw.replaceAll('\n', ' '), geom: {})
         : null;
+    debugPrint('[buildSteps] raw.length=${raw.length} buyerName="${st.buyerName}" nameRaw="$nameRaw"');
     final resolvedCustomer = st.buyerName.isNotEmpty ? st.buyerName : nameRaw;
     final resolvedAmount = st.amount > 0 ? st.amount : null;
     final resolvedReceiverAcct = st.receiverAccount.isNotEmpty
@@ -792,9 +945,23 @@ class _VerificationResult extends StatelessWidget {
     final namePassed = resolvedCustomer != null;
     final nameValue = resolvedCustomer ?? 'Not found';
 
-    // ── Step: Fetch receipt page (network-dependent) ────────────────────
-    final fetchPassed = ref.isNotEmpty && RegExp(r'\d').hasMatch(ref);
-    final fetchValue = ref.isNotEmpty ? 'TX: $ref' : 'No reference found';
+    // ── Step: Fetch receipt page (real backend, 10s timeout) ──────────
+    final fr = st.fetchResult;
+    bool fetchPassed;
+    String fetchValue;
+    if (fr == null && st.referenceCode.isEmpty) {
+      fetchPassed = false;
+      fetchValue = 'No reference found';
+    } else if (fr == null) {
+      fetchPassed = false;
+      fetchValue = 'Fetching TX: $ref …';
+    } else if (fr.found) {
+      fetchPassed = true;
+      fetchValue = 'Confirmed: ${fr.amount?.toStringAsFixed(2) ?? ""} ETB → ${fr.receiverAccount ?? ref}';
+    } else {
+      fetchPassed = false;
+      fetchValue = 'Could not confirm (${fr.error ?? "not found"})';
+    }
 
     // ── Step: Extract amount ────────────────────────────────────────────
     final amountExtracted = resolvedAmount != null && resolvedAmount > 0;
@@ -918,7 +1085,7 @@ class _VerificationResult extends StatelessWidget {
       _StepData(icon: Icons.receipt_rounded,
         label: 'Fetch receipt page',
         value: fetchValue,
-        state: stepState(fetchPassed),
+        state: fetchPassed ? VStepState.pass : (fr == null ? VStepState.review : VStepState.review),
         percent: fetchPassed ? 100.0 : 0.0),
       _StepData(icon: Icons.monetization_on_rounded,
         label: 'Extract amount',
@@ -961,6 +1128,45 @@ class _VerificationResult extends StatelessWidget {
         state: verdictPassed ? VStepState.pass : (verdictLabel == 'Review (needs owner)' || verdictLabel == 'Not yet verified' ? VStepState.review : VStepState.fail),
         percent: verdictPassed ? 100.0 : 0.0),
     ];
+  }
+}
+
+class _ExtractedField extends StatelessWidget {
+  const _ExtractedField({
+    required this.label,
+    required this.value,
+    required this.textSecondary,
+  });
+  final String label, value;
+  final Color textSecondary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 144,
+            child: Text(label,
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: textSecondary, fontWeight: FontWeight.w500)),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(value,
+                style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: value == 'Not found' || value == 'Not set' || value == 'None'
+                        ? Colors.white38
+                        : Colors.white),
+                overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
   }
 }
 

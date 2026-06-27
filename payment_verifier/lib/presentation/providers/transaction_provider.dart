@@ -1,13 +1,14 @@
-import 'dart:io';
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:payment_verifier/data/datasources/supabase_notification_datasource.dart';
 import 'package:payment_verifier/data/datasources/supabase_transaction_datasource.dart';
 import 'package:payment_verifier/data/repositories/transaction_repository_impl.dart';
+import 'package:payment_verifier/data/services/verification_service.dart';
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 import 'package:payment_verifier/domain/repositories/transaction_repository.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/core/constants/app_constants.dart';
+import 'package:payment_verifier/data/services/ocr_service.dart';
 
 final transactionDatasourceProvider =
     Provider<SupabaseTransactionDatasource>((ref) {
@@ -96,25 +97,6 @@ final weeklyTotalsProvider =
   return repo.getWeeklyTotals();
 });
 
-class ReceiptVerification {
-  final bool ownerNameMatch;
-  final bool amountValid;
-  final bool referenceFormatValid;
-  final bool imageIntegrity;
-  final String ownerName;
-
-  const ReceiptVerification({
-    this.ownerNameMatch = false,
-    this.amountValid = false,
-    this.referenceFormatValid = false,
-    this.imageIntegrity = false,
-    this.ownerName = '',
-  });
-
-  bool get allPassed => ownerNameMatch && amountValid && referenceFormatValid && imageIntegrity;
-  int get passedCount => [ownerNameMatch, amountValid, referenceFormatValid, imageIntegrity].where((b) => b).length;
-}
-
 class VerifyState {
   const VerifyState({
     this.selectedBank,
@@ -133,19 +115,10 @@ class VerifyState {
     this.result,
     this.error,
     this.receiptImage,
-    this.verification,
-    this.isVerifying = false,
-    this.accountMatchPassed = false,
-    this.accountMatchNote = '',
     this.ocrCompleted = false,
-    this.duplicateCheckPassed = false,
-    this.duplicateCheckNote = '',
-    this.hasVerified = false,
     this.attemptCount = 0,
     this.maxAttempts = 3,
-    this.dateFreshnessPassed = false,
-    this.dateFreshnessNote = '',
-    this.showFinalRejected = false,
+    this.verifyResult,
   });
 
   final String? selectedBank;
@@ -164,19 +137,10 @@ class VerifyState {
   final TransactionEntity? result;
   final String? error;
   final String? receiptImage;
-  final ReceiptVerification? verification;
-  final bool isVerifying;
-  final bool accountMatchPassed;
-  final String accountMatchNote;
   final bool ocrCompleted;
-  final bool duplicateCheckPassed;
-  final String duplicateCheckNote;
-  final bool hasVerified;
   final int attemptCount;
   final int maxAttempts;
-  final bool dateFreshnessPassed;
-  final String dateFreshnessNote;
-  final bool showFinalRejected;
+  final VerifyResult? verifyResult;
 
   double get tolerancePercent {
     if (expectedAmount <= 0 || amount <= 0) return 0;
@@ -207,18 +171,10 @@ class VerifyState {
     TransactionEntity? result,
     String? error,
     String? receiptImage,
-    ReceiptVerification? verification,
-    bool? isVerifying,
-    bool? accountMatchPassed,
-    String? accountMatchNote,
     bool? ocrCompleted,
-    bool? duplicateCheckPassed,
-    String? duplicateCheckNote,
-    bool? hasVerified,
     int? attemptCount,
-    bool? dateFreshnessPassed,
-    String? dateFreshnessNote,
-    bool? showFinalRejected,
+    int? maxAttempts,
+    VerifyResult? verifyResult,
     bool clearResult = false,
     bool clearError = false,
   }) {
@@ -239,18 +195,10 @@ class VerifyState {
       result: clearResult ? null : (result ?? this.result),
       error: clearError ? null : (error ?? this.error),
       receiptImage: receiptImage ?? this.receiptImage,
-      verification: verification ?? this.verification,
-      isVerifying: isVerifying ?? this.isVerifying,
-      accountMatchPassed: accountMatchPassed ?? this.accountMatchPassed,
-      accountMatchNote: accountMatchNote ?? this.accountMatchNote,
       ocrCompleted: ocrCompleted ?? this.ocrCompleted,
-      duplicateCheckPassed: duplicateCheckPassed ?? this.duplicateCheckPassed,
-      duplicateCheckNote: duplicateCheckNote ?? this.duplicateCheckNote,
-      hasVerified: hasVerified ?? this.hasVerified,
       attemptCount: attemptCount ?? this.attemptCount,
-      dateFreshnessPassed: dateFreshnessPassed ?? this.dateFreshnessPassed,
-      dateFreshnessNote: dateFreshnessNote ?? this.dateFreshnessNote,
-      showFinalRejected: showFinalRejected ?? this.showFinalRejected,
+      maxAttempts: maxAttempts ?? this.maxAttempts,
+      verifyResult: verifyResult ?? this.verifyResult,
     );
   }
 }
@@ -388,25 +336,6 @@ DateTime? parseReceiptDate(String raw) {
   return null;
 }
 
-/// Check whether a receipt date is fresh enough to pass verification.
-/// Not in the future (2 min clock-skew allowance), not older than [maxAge].
-({bool passed, String note}) checkDateFreshness(String rawDate, {Duration maxAge = const Duration(hours: 24)}) {
-  if (rawDate.isEmpty) return (passed: false, note: 'unreadable date');
-  final dt = parseReceiptDate(rawDate);
-  if (dt == null) return (passed: false, note: 'unreadable date');
-  final now = DateTime.now();
-  final diff = now.difference(dt);
-  // Allow 2 minutes clock skew into the future
-  if (diff.isNegative && diff.abs().inMinutes > 2) {
-    return (passed: false, note: 'future-dated (${dt.toString().substring(0, 16)})');
-  }
-  if (diff > maxAge) {
-    final hours = diff.inHours;
-    return (passed: false, note: 'receipt too old ($hours hours ago, max ${maxAge.inHours}h)');
-  }
-  return (passed: true, note: 'fresh (${dt.toString().substring(0, 16)})');
-}
-
 class VerifyNotifier extends StateNotifier<VerifyState> {
   VerifyNotifier(this._repo, this._notifDatasource, this._txDatasource)
       : super(const VerifyState());
@@ -417,7 +346,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
   void setBank(String bank) => state = state.copyWith(selectedBank: bank);
   void setOcrDetectedBank(String bank) => state = state.copyWith(ocrDetectedBank: bank);
   void setOcrRawText(String text) => state = state.copyWith(ocrRawText: text);
-  void setCode(String code) => state = state.copyWith(referenceCode: code);
+  void setCode(String code) => state = state.copyWith(referenceCode: normalizeFTReference(code));
   void setBuyerName(String name) => state = state.copyWith(buyerName: name);
   void setReceiverName(String name) => state = state.copyWith(receiverName: name);
   void setReceiverAccount(String acct) => state = state.copyWith(receiverAccount: acct);
@@ -431,139 +360,13 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     state = state.copyWith(amount: amt, tip: tip);
   }
   void setReceiptImage(String? path) => state = state.copyWith(receiptImage: path);
-  void setAccountMatch(bool passed, String note) => state = state.copyWith(accountMatchPassed: passed, accountMatchNote: note);
   void setOcrCompleted() => state = state.copyWith(ocrCompleted: true);
   void setAttemptCount(int n) => state = state.copyWith(attemptCount: n);
-  void setDateFreshness(bool passed, String note) => state = state.copyWith(dateFreshnessPassed: passed, dateFreshnessNote: note);
+  void setVerifyResult(VerifyResult? r) => state = state.copyWith(verifyResult: r);
 
-  Future<void> checkDuplicate() async {
-    if (state.referenceCode.isEmpty) return;
-    try {
-      final existingTxs = await _repo.getTransactions();
-      final dup = existingTxs.where((t) => t.referenceCode == state.referenceCode).toList();
-      if (dup.isNotEmpty) {
-        final dates = dup.map((t) => t.createdAt.toString().substring(0, 10)).join(', ');
-        state = state.copyWith(
-          duplicateCheckPassed: false,
-          duplicateCheckNote: 'Already used on $dates',
-        );
-      } else {
-        state = state.copyWith(
-          duplicateCheckPassed: true,
-          duplicateCheckNote: 'No duplicate found — ready to verify',
-        );
-      }
-    } catch (_) {}
-  }
-
-  void runDateFreshnessCheck() {
-    if (state.transactionDate.isEmpty) {
-      state = state.copyWith(dateFreshnessPassed: false, dateFreshnessNote: 'unreadable date');
-      return;
-    }
-    final result = checkDateFreshness(state.transactionDate);
-    state = state.copyWith(dateFreshnessPassed: result.passed, dateFreshnessNote: result.note);
-  }
-
-  void runLiveCheck() {
-    if (state.selectedBank == null || state.amount <= 0) return;
-    final bank = BankName.values.firstWhere(
-      (b) => b.displayName == state.selectedBank,
-      orElse: () => BankName.cbe,
-    );
-    final hasImage = state.receiptImage != null && File(state.receiptImage!).existsSync();
-    final verification = ReceiptVerification(
-      ownerNameMatch: state.buyerName.trim().length >= 2,
-      amountValid: state.amount >= state.orderTotal,
-      referenceFormatValid: state.referenceCode.isNotEmpty
-          ? PaymentValidators.validateReference(state.referenceCode, bank)
-          : false,
-      imageIntegrity: hasImage,
-      ownerName: state.buyerName,
-    );
-    state = state.copyWith(verification: verification);
-  }
-
-  Future<void> verify({String? waiterName, String? managerName}) async {
-    if (state.referenceCode.isEmpty) {
-      state = state.copyWith(error: 'Reference code is required. Enter it manually or scan a valid receipt.');
-      return;
-    }
-
-    final bank = state.selectedBank ?? 'Telebirr';
+  Future<TransactionEntity> saveTransaction() async {
     final refCode = state.referenceCode;
-
-    state = state.copyWith(
-      isLoading: true,
-      clearResult: true,
-      clearError: true,
-      hasVerified: true,
-      selectedBank: bank,
-      referenceCode: refCode,
-    );
-    try {
-      await _doVerify(managerName: managerName, waiterName: waiterName).timeout(const Duration(seconds: 10));
-    } on TimeoutException {
-      state = state.copyWith(
-        accountMatchNote: 'could not confirm — check manually',
-        accountMatchPassed: false,
-        hasVerified: true,
-      );
-      _handleFailure('Fetch receipt page timed out after 10s — could not confirm', waiterName);
-    } catch (e) {
-      state = state.copyWith(
-        accountMatchNote: 'could not confirm — check manually',
-        accountMatchPassed: false,
-        hasVerified: true,
-      );
-      _handleFailure(e.toString(), waiterName);
-    }
-  }
-
-  void _handleFailure(String errorMsg, String? waiterName) {
-    final attempt = state.attemptCount + 1;
-    if (attempt >= state.maxAttempts) {
-      // 3rd failure — final reject
-      _recordInvalidAttempt(errorMsg, attempt);
-      state = state.copyWith(
-        isLoading: false,
-        error: 'This receipt is not valid',
-        attemptCount: attempt,
-        showFinalRejected: true,
-      );
-    } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Scan failed — please scan again ($attempt/${state.maxAttempts})',
-        attemptCount: attempt,
-      );
-    }
-  }
-
-  Future<void> _recordInvalidAttempt(String reason, int attempt) async {
-    try {
-      await _txDatasource.recordInvalidAttempt(
-        referenceCode: state.referenceCode,
-        amount: state.amount,
-        receiverAccount: state.receiverAccount,
-        transactionDate: state.transactionDate,
-        bankName: state.selectedBank ?? '',
-        buyerName: state.buyerName,
-        failureReason: reason,
-        attemptCount: attempt,
-      );
-      print('[Verify] invalid attempt #$attempt recorded: $reason');
-    } catch (e) {
-      print('[Verify] failed to record invalid attempt: $e');
-    }
-  }
-
-  Future<void> _doVerify({String? managerName, String? waiterName}) async {
     final bank = state.selectedBank ?? 'Telebirr';
-    final refCode = state.referenceCode;
-
-    // Run freshness check
-    runDateFreshnessCheck();
 
     final existingTxs = await _repo.getTransactions();
     final fraudAnalysis = analyzeFraudRisk(
@@ -574,61 +377,8 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       orderTotal: state.orderTotal,
       existingTransactions: existingTxs,
     );
-    final flags = [...fraudAnalysis.flags];
 
-    // ── Critical Failure Checks ─────────────────────────────────────────
-
-    // 0. Bank method mismatch — selected bank must match receipt
-    if (state.ocrDetectedBank != null && state.selectedBank != null &&
-        state.ocrDetectedBank != state.selectedBank) {
-      _handleFailure('Bank mismatch: receipt shows "${state.ocrDetectedBank}" but "${state.selectedBank}" was selected', waiterName);
-      return;
-    }
-
-    // 1. Receiver account mismatch
-    if (state.receiverAccount.isNotEmpty && !state.accountMatchPassed) {
-      _handleFailure('Receiver account mismatch: ${state.accountMatchNote}', waiterName);
-      return;
-    }
-
-    // 2. Duplicate receipt → fraud
-    if (!state.duplicateCheckPassed && state.duplicateCheckNote.isNotEmpty) {
-      _handleFailure('Duplicate receipt: ${state.duplicateCheckNote}', waiterName);
-      return;
-    }
-
-    // 3. Old receipt
-    if (state.transactionDate.isNotEmpty && !state.dateFreshnessPassed) {
-      _handleFailure('Receipt too old: ${state.dateFreshnessNote}', waiterName);
-      return;
-    }
-
-    // 4. Receiver name mismatch (manager name check)
-    if (state.receiverName.isNotEmpty && managerName != null && managerName.isNotEmpty) {
-      final receiptName = state.receiverName.trim().toLowerCase();
-      final manager = managerName.trim().toLowerCase();
-      if (!receiptName.contains(manager) && !manager.contains(receiptName)) {
-        _handleFailure('Receiver name mismatch: receipt pays "$receiptName" which does not match your business name', waiterName);
-        return;
-      }
-    }
-
-    // 5. Amount less than expected (exact match required)
-    if (state.orderTotal > 0 && state.amount < state.orderTotal) {
-      _handleFailure('Amount underpaid: ${state.amount.toStringAsFixed(0)} ETB < ${state.orderTotal.toStringAsFixed(0)} ETB', waiterName);
-      return;
-    }
-
-    // ── Non-critical flags ──────────────────────────────────────────────
-
-    if (state.accountMatchPassed && state.receiverAccount.isNotEmpty) {
-      flags.insert(0, 'Receiver account verified: ${state.accountMatchNote}');
-    }
-    if (!state.dateFreshnessPassed && state.transactionDate.isNotEmpty) {
-      flags.insert(0, 'Date freshness: ${state.dateFreshnessNote}');
-    }
-
-    print('[Verify] amount=${state.amount} ref=$refCode receiver=${state.receiverAccount} date=${state.transactionDate} attempts=${state.attemptCount + 1}');
+    print('[Verify] saving tx amount=${state.amount} ref=$refCode receiver=${state.receiverAccount} date=${state.transactionDate}');
 
     final tx = await _repo.createTransaction(
       bankName: bank,
@@ -638,7 +388,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       tip: state.tip,
       imageUrl: state.receiptImage,
       riskScore: fraudAnalysis.riskScore,
-      riskFlags: flags,
+      riskFlags: fraudAnalysis.flags,
       orderTotal: state.orderTotal,
       status: fraudAnalysis.suggestedStatus.value,
     );
@@ -657,8 +407,8 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       );
     }
 
-    // Success — reset attempt counter
     state = state.copyWith(isLoading: false, result: tx, attemptCount: 0);
+    return tx;
   }
 
   void reset() => state = const VerifyState();
