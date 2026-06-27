@@ -52,6 +52,12 @@ class _GradientButtonState extends State<GradientButton>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppTheme.textOnPrimary : Colors.white;
+    final shadowColor = isDark
+        ? AppTheme.primaryGreen.withOpacity(0.35)
+        : AppTheme.primaryGreen.withOpacity(0.12);
+
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) => _controller.reverse(),
@@ -70,20 +76,20 @@ class _GradientButtonState extends State<GradientButton>
             borderRadius: BorderRadius.circular(widget.borderRadius),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.primaryGreen.withOpacity(0.35),
+                color: shadowColor,
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
             ],
           ),
           child: widget.isLoading
-              ? const Center(
+              ? Center(
                   child: SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      color: AppTheme.textOnPrimary,
+                      color: textColor,
                     ),
                   ),
                 )
@@ -91,7 +97,7 @@ class _GradientButtonState extends State<GradientButton>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     if (widget.icon != null) ...[
-                      Icon(widget.icon, color: AppTheme.textOnPrimary, size: 20),
+                      Icon(widget.icon, color: textColor, size: 20),
                       const SizedBox(width: 8),
                     ],
                     Text(
@@ -99,7 +105,7 @@ class _GradientButtonState extends State<GradientButton>
                       style: GoogleFonts.inter(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.textOnPrimary,
+                        color: textColor,
                       ),
                     ),
                   ],

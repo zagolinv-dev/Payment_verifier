@@ -120,6 +120,7 @@ class VerifyState {
     this.selectedBank,
     this.referenceCode = '',
     this.buyerName = '',
+    this.receiverName = '',
     this.receiverAccount = '',
     this.transactionDate = '',
     this.orderTotal = 0.0,
@@ -148,6 +149,7 @@ class VerifyState {
   final String? selectedBank;
   final String referenceCode;
   final String buyerName;
+  final String receiverName;
   final String receiverAccount;
   final String transactionDate;
   final double orderTotal;
@@ -188,6 +190,7 @@ class VerifyState {
     String? selectedBank,
     String? referenceCode,
     String? buyerName,
+    String? receiverName,
     String? receiverAccount,
     String? transactionDate,
     double? orderTotal,
@@ -217,6 +220,7 @@ class VerifyState {
       selectedBank: selectedBank ?? this.selectedBank,
       referenceCode: referenceCode ?? this.referenceCode,
       buyerName: buyerName ?? this.buyerName,
+      receiverName: receiverName ?? this.receiverName,
       receiverAccount: receiverAccount ?? this.receiverAccount,
       transactionDate: transactionDate ?? this.transactionDate,
       orderTotal: orderTotal ?? this.orderTotal,
@@ -405,6 +409,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
   void setBank(String bank) => state = state.copyWith(selectedBank: bank);
   void setCode(String code) => state = state.copyWith(referenceCode: code);
   void setBuyerName(String name) => state = state.copyWith(buyerName: name);
+  void setReceiverName(String name) => state = state.copyWith(receiverName: name);
   void setReceiverAccount(String acct) => state = state.copyWith(receiverAccount: acct);
   void setTransactionDate(String date) => state = state.copyWith(transactionDate: date);
   void setOrderTotal(double val) => state = state.copyWith(orderTotal: val, expectedAmount: val);
@@ -466,7 +471,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     state = state.copyWith(verification: verification);
   }
 
-  Future<void> verify({String? waiterName}) async {
+  Future<void> verify({String? waiterName, String? managerName}) async {
     if (state.referenceCode.isEmpty) {
       state = state.copyWith(error: 'Reference code is required. Enter it manually or scan a valid receipt.');
       return;
@@ -484,7 +489,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       referenceCode: refCode,
     );
     try {
-      await _doVerify().timeout(const Duration(seconds: 10));
+      await _doVerify(managerName: managerName, waiterName: waiterName).timeout(const Duration(seconds: 10));
     } on TimeoutException {
       _handleFailure('Fetch receipt page timed out after 10s', waiterName);
     } catch (e) {
@@ -530,7 +535,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     }
   }
 
-  Future<void> _doVerify() async {
+  Future<void> _doVerify({String? managerName, String? waiterName}) async {
     final bank = state.selectedBank ?? 'Telebirr';
     final refCode = state.referenceCode;
 
@@ -547,9 +552,45 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       existingTransactions: existingTxs,
     );
     final flags = [...fraudAnalysis.flags];
-    if (!state.accountMatchPassed && state.receiverAccount.isNotEmpty) {
-      flags.insert(0, 'Receiver account mismatch: ${state.accountMatchNote}');
+
+    // ── Critical Failure Checks ─────────────────────────────────────────
+
+    // 1. Receiver account mismatch
+    if (state.receiverAccount.isNotEmpty && !state.accountMatchPassed) {
+      _handleFailure('Receiver account mismatch: ${state.accountMatchNote}', waiterName);
+      return;
     }
+
+    // 2. Duplicate receipt → fraud
+    if (!state.duplicateCheckPassed && state.duplicateCheckNote.isNotEmpty) {
+      _handleFailure('Duplicate receipt: ${state.duplicateCheckNote}', waiterName);
+      return;
+    }
+
+    // 3. Old receipt
+    if (state.transactionDate.isNotEmpty && !state.dateFreshnessPassed) {
+      _handleFailure('Receipt too old: ${state.dateFreshnessNote}', waiterName);
+      return;
+    }
+
+    // 4. Receiver name mismatch (manager name check)
+    if (state.receiverName.isNotEmpty && managerName != null && managerName.isNotEmpty) {
+      final receiptName = state.receiverName.trim().toLowerCase();
+      final manager = managerName.trim().toLowerCase();
+      if (!receiptName.contains(manager) && !manager.contains(receiptName)) {
+        _handleFailure('Receiver name mismatch: receipt pays "$receiptName" which does not match your business name', waiterName);
+        return;
+      }
+    }
+
+    // 5. Amount less than expected (exact match required)
+    if (state.orderTotal > 0 && state.amount < state.orderTotal) {
+      _handleFailure('Amount underpaid: ${state.amount.toStringAsFixed(0)} ETB < ${state.orderTotal.toStringAsFixed(0)} ETB', waiterName);
+      return;
+    }
+
+    // ── Non-critical flags ──────────────────────────────────────────────
+
     if (state.accountMatchPassed && state.receiverAccount.isNotEmpty) {
       flags.insert(0, 'Receiver account verified: ${state.accountMatchNote}');
     }

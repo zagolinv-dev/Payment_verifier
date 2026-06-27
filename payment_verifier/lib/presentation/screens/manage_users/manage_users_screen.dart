@@ -240,9 +240,9 @@ class _UserCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
+        backgroundColor: card,
         title: Text('Change Role',
-            style: GoogleFonts.outfit(color: AppTheme.textPrimary)),
+            style: GoogleFonts.outfit(color: textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: UserRole.values.map((role) {
@@ -256,7 +256,7 @@ class _UserCard extends ConsumerWidget {
                     : AppTheme.primaryGreen,
               ),
               title: Text(role.value,
-                  style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+                  style: GoogleFonts.inter(color: textPrimary)),
               selected: user.role == role,
               selectedTileColor: AppTheme.primaryGreen.withOpacity(0.1),
               onTap: () {
@@ -274,17 +274,17 @@ class _UserCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
+        backgroundColor: card,
         title: Text(
           'Manage ${user.displayName}',
-          style: GoogleFonts.outfit(color: AppTheme.textPrimary),
+          style: GoogleFonts.outfit(color: textPrimary),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
               leading: const Icon(Icons.lock_reset_rounded, color: AppTheme.accentGold),
-              title: Text('Reset Password', style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+              title: Text('Reset Password', style: GoogleFonts.inter(color: textPrimary)),
               onTap: () {
                 Navigator.pop(ctx);
                 _showResetPasswordDialog(context, ref);
@@ -292,7 +292,7 @@ class _UserCard extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline_rounded, color: AppTheme.error),
-              title: Text('Delete User', style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+              title: Text('Delete User', style: GoogleFonts.inter(color: textPrimary)),
               onTap: () {
                 Navigator.pop(ctx);
                 _showDeleteConfirmationDialog(context, ref);
@@ -311,10 +311,10 @@ class _UserCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
+        backgroundColor: card,
         title: Text(
           'Reset Password',
-          style: GoogleFonts.outfit(color: AppTheme.textPrimary),
+          style: GoogleFonts.outfit(color: textPrimary),
         ),
         content: Form(
           key: formKey,
@@ -323,7 +323,7 @@ class _UserCard extends ConsumerWidget {
             children: [
               Text(
                 'Set a new password for ${user.displayName}.',
-                style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 13),
+                style: GoogleFonts.inter(color: textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 16),
               AppTextField(
@@ -343,7 +343,7 @@ class _UserCard extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textTertiary)),
+            child: Text('Cancel', style: GoogleFonts.inter(color: textTertiary)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -380,19 +380,19 @@ class _UserCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.bgCard,
+        backgroundColor: card,
         title: Text(
           'Delete User',
-          style: GoogleFonts.outfit(color: AppTheme.textPrimary),
+          style: GoogleFonts.outfit(color: textPrimary),
         ),
         content: Text(
           'Are you sure you want to delete ${user.displayName}? This action cannot be undone.',
-          style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 14),
+          style: GoogleFonts.inter(color: textSecondary, fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textTertiary)),
+            child: Text('Cancel', style: GoogleFonts.inter(color: textTertiary)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -490,11 +490,19 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeProvider);
+    final isDark = themeMode == ThemeMode.dark;
+    final bg = isDark ? AppTheme.bgSurface : AppTheme.lightSurface;
+    final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final textTertiary = isDark ? AppTheme.textTertiary : AppTheme.lightTextTertiary;
+    final borderMedium = isDark ? AppTheme.borderMedium : AppTheme.lightBorderMedium;
+
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.bgSurface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SafeArea(
         top: false,
@@ -512,7 +520,7 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: AppTheme.borderMedium,
+                      color: borderMedium,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -523,22 +531,22 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
                   style: GoogleFonts.outfit(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
+                    color: textPrimary,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Create login credentials for a new waiter.',
                   style: GoogleFonts.inter(
-                      fontSize: 13, color: AppTheme.textSecondary),
+                      fontSize: 13, color: textSecondary),
                 ),
                 const SizedBox(height: 24),
                 AppTextField(
                   label: 'Full Name',
                   hint: 'e.g. Tigist Alemu',
                   controller: _nameController,
-                  prefixIcon: const Icon(Icons.person_outline_rounded,
-                      color: AppTheme.textTertiary, size: 20),
+                  prefixIcon: Icon(Icons.person_outline_rounded,
+                      color: textTertiary, size: 20),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Required';
                     return null;
@@ -550,8 +558,8 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
                   hint: 'waiter@tspay.com',
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  prefixIcon: const Icon(Icons.email_outlined,
-                      color: AppTheme.textTertiary, size: 20),
+                  prefixIcon: Icon(Icons.email_outlined,
+                      color: textTertiary, size: 20),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Required';
                     if (!v.contains('@')) return 'Invalid email';
@@ -564,13 +572,13 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
                   hint: '••••••••',
                   controller: _passwordController,
                   obscureText: _obscurePassword,
-                  prefixIcon: const Icon(Icons.lock_outline_rounded,
-                      color: AppTheme.textTertiary, size: 20),
+                  prefixIcon: Icon(Icons.lock_outline_rounded,
+                      color: textTertiary, size: 20),
                   suffixIcon: IconButton(
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     icon: Icon(
                       _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      color: AppTheme.textTertiary,
+                      color: textTertiary,
                       size: 20,
                     ),
                   ),
@@ -586,13 +594,13 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
                   hint: '••••••••',
                   controller: _confirmPasswordController,
                   obscureText: _obscureConfirmPassword,
-                  prefixIcon: const Icon(Icons.lock_outline_rounded,
-                      color: AppTheme.textTertiary, size: 20),
+                  prefixIcon: Icon(Icons.lock_outline_rounded,
+                      color: textTertiary, size: 20),
                   suffixIcon: IconButton(
                     onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
                     icon: Icon(
                       _obscureConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      color: AppTheme.textTertiary,
+                      color: textTertiary,
                       size: 20,
                     ),
                   ),

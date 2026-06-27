@@ -37,8 +37,8 @@ abstract class TransactionRepository {
   /// Count verified and failed today
   Future<({int verified, int failed})> getTodayVerificationCounts();
 
-  /// Today's ledger total
-  Future<({double total, int count})> getTodayLedger();
+  /// Today's summary total
+  Future<({double total, int count})> getTodaySummary();
 
   /// Weekly totals grouped by day (Mon-Sun)
   Future<Map<String, double>> getWeeklyTotals();

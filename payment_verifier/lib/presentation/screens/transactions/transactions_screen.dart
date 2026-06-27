@@ -118,7 +118,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text('Audit trail & payment ledger', style: GoogleFonts.inter(fontSize: 14, color: textSecondary)),
+                    child: Text('Audit trail & payment summary', style: GoogleFonts.inter(fontSize: 14, color: textSecondary)),
                   ),
                   GestureDetector(
                     onTap: () => _exportPdf(ref),

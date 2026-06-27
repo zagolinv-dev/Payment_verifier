@@ -161,7 +161,7 @@ class DashboardScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: metricsAsync.when(
-                  data: (m) => _TodayLedgerCard(metrics: m),
+                  data: (m) => _TodaySummaryCard(metrics: m),
                   loading: () => _ShimmerBlock(height: 90, card: card, cardElevated: cardElevated),
                   error: (_, __) => const SizedBox.shrink(),
                 ),
@@ -578,8 +578,8 @@ class _KpiGridShimmer extends StatelessWidget {
   }
 }
 
-class _TodayLedgerCard extends StatelessWidget {
-  const _TodayLedgerCard({required this.metrics});
+class _TodaySummaryCard extends StatelessWidget {
+  const _TodaySummaryCard({required this.metrics});
   final DashboardMetrics metrics;
 
   @override
@@ -599,7 +599,7 @@ class _TodayLedgerCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Today's Ledger", style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withOpacity(0.8))),
+                Text("Today's Summary", style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withOpacity(0.8))),
                 const SizedBox(height: 4),
                 Text(AppFormatters.formatETB(metrics.todayTotal), style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
               ],

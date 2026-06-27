@@ -98,16 +98,20 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
         ref.read(verifyProvider.notifier).setReceiverAccount(result.receiverAccount!);
       }
 
-      if (result.receiverName != null && result.receiverName!.isNotEmpty) {
-        if (_buyerController.text.isEmpty) {
-          _buyerController.text = result.receiverName!;
-        }
-        ref.read(verifyProvider.notifier).setBuyerName(result.receiverName!);
-      } else if (result.senderName != null && result.senderName!.isNotEmpty) {
+      if (result.senderName != null && result.senderName!.isNotEmpty) {
         if (_buyerController.text.isEmpty) {
           _buyerController.text = result.senderName!;
         }
         ref.read(verifyProvider.notifier).setBuyerName(result.senderName!);
+      } else if (result.receiverName != null && result.receiverName!.isNotEmpty) {
+        if (_buyerController.text.isEmpty) {
+          _buyerController.text = result.receiverName!;
+        }
+        ref.read(verifyProvider.notifier).setBuyerName(result.receiverName!);
+      }
+
+      if (result.receiverName != null && result.receiverName!.isNotEmpty) {
+        ref.read(verifyProvider.notifier).setReceiverName(result.receiverName!);
       }
 
       if (result.date != null && result.date!.isNotEmpty) {
@@ -156,9 +160,13 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
+    final isDark = ref.read(themeProvider) == ThemeMode.dark;
+    final sheetBg = isDark ? AppTheme.bgCard : AppTheme.lightSurface;
+    final sheetText = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
-      backgroundColor: AppTheme.bgCard,
+      backgroundColor: sheetBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -170,14 +178,14 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
               leading: const Icon(Icons.camera_alt_outlined,
                   color: AppTheme.primaryGreen),
               title: Text('Take Photo (Camera)',
-                  style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+                  style: GoogleFonts.inter(color: sheetText)),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.image_outlined,
                   color: AppTheme.accentGold),
               title: Text('Choose from Gallery',
-                  style: GoogleFonts.inter(color: AppTheme.textPrimary)),
+                  style: GoogleFonts.inter(color: sheetText)),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
           ],
@@ -249,7 +257,10 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
     final user = ref.read(currentUserProvider);
     // Run freshness check before verifying
     ref.read(verifyProvider.notifier).runDateFreshnessCheck();
-    await ref.read(verifyProvider.notifier).verify(waiterName: user?.id);
+    await ref.read(verifyProvider.notifier).verify(
+      waiterName: user?.id,
+      managerName: user?.displayName,
+    );
     final st = ref.read(verifyProvider);
     if (st.result != null || st.error != null) {
       _resultAnim.forward(from: 0);
@@ -384,6 +395,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                   card: card,
                   borderColor: borderColor,
                   textSecondary: textSecondary,
+                  textTertiary: isDark ? AppTheme.textTertiary : AppTheme.lightTextTertiary,
                 ),
 
                 if (_isOcrRunning || _ocrStatus.isNotEmpty) ...[
@@ -559,10 +571,11 @@ class _ImageUploadZone extends StatelessWidget {
       required this.onTap,
       required this.card,
       required this.borderColor,
-      required this.textSecondary});
+      required this.textSecondary,
+      required this.textTertiary});
   final XFile? selectedImage;
   final VoidCallback onTap;
-  final Color card, borderColor, textSecondary;
+  final Color card, borderColor, textSecondary, textTertiary;
 
   @override
   Widget build(BuildContext context) {
@@ -622,7 +635,7 @@ class _ImageUploadZone extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text('PNG, JPEG supported',
                       style: GoogleFonts.inter(
-                          fontSize: 12, color: AppTheme.textTertiary)),
+                          fontSize: 12, color: textTertiary)),
                 ],
               ),
       ),

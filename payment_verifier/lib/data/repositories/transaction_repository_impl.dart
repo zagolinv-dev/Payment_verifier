@@ -70,7 +70,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
   }
 
   @override
-  Future<({double total, int count})> getTodayLedger() async {
+  Future<({double total, int count})> getTodaySummary() async {
     final metrics = await _datasource.getDashboardMetrics();
     return (total: metrics.todayTotal, count: metrics.todayCount);
   }
