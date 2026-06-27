@@ -108,7 +108,6 @@ class VerifyState {
     this.receiverAccount = '',
     this.transactionDate = '',
     this.orderTotal = 0.0,
-    this.expectedAmount = 0.0,
     this.amount = 0.0,
     this.tip = 0.0,
     this.isLoading = false,
@@ -119,6 +118,7 @@ class VerifyState {
     this.attemptCount = 0,
     this.maxAttempts = 3,
     this.verifyResult,
+    this.dateElapsed = '',
   });
 
   final String? selectedBank;
@@ -130,7 +130,6 @@ class VerifyState {
   final String receiverAccount;
   final String transactionDate;
   final double orderTotal;
-  final double expectedAmount;
   final double amount;
   final double tip;
   final bool isLoading;
@@ -141,18 +140,16 @@ class VerifyState {
   final int attemptCount;
   final int maxAttempts;
   final VerifyResult? verifyResult;
-
-  double get tolerancePercent {
-    if (expectedAmount <= 0 || amount <= 0) return 0;
-    return ((amount - expectedAmount) / expectedAmount * 100).abs();
-  }
-
-  bool get tolerancePassed => tolerancePercent <= 5.0;
+  final String dateElapsed;
 
   bool get canVerify =>
       selectedBank != null &&
       receiptImage != null &&
-      referenceCode.isNotEmpty;
+      referenceCode.isNotEmpty &&
+      orderTotal > 0 &&
+      ocrCompleted;
+
+  bool get isBlocked => attemptCount >= maxAttempts;
 
   VerifyState copyWith({
     String? selectedBank,
@@ -164,7 +161,6 @@ class VerifyState {
     String? receiverAccount,
     String? transactionDate,
     double? orderTotal,
-    double? expectedAmount,
     double? amount,
     double? tip,
     bool? isLoading,
@@ -175,6 +171,7 @@ class VerifyState {
     int? attemptCount,
     int? maxAttempts,
     VerifyResult? verifyResult,
+    String? dateElapsed,
     bool clearResult = false,
     bool clearError = false,
   }) {
@@ -188,7 +185,6 @@ class VerifyState {
       receiverAccount: receiverAccount ?? this.receiverAccount,
       transactionDate: transactionDate ?? this.transactionDate,
       orderTotal: orderTotal ?? this.orderTotal,
-      expectedAmount: expectedAmount ?? this.expectedAmount,
       amount: amount ?? this.amount,
       tip: tip ?? this.tip,
       isLoading: isLoading ?? this.isLoading,
@@ -199,6 +195,7 @@ class VerifyState {
       attemptCount: attemptCount ?? this.attemptCount,
       maxAttempts: maxAttempts ?? this.maxAttempts,
       verifyResult: verifyResult ?? this.verifyResult,
+      dateElapsed: dateElapsed ?? this.dateElapsed,
     );
   }
 }
@@ -277,65 +274,6 @@ FraudDetectionResult analyzeFraudRisk({
   );
 }
 
-// Date parsing helpers ------------------------------------------------
-
-/// Parse a receipt date string into a [DateTime]. Returns null on failure.
-DateTime? parseReceiptDate(String raw) {
-  final s = raw.trim();
-  // "Jun 24, 2026 01:11 PM"
-  final m1 = RegExp(
-    r'^([A-Z][a-z]{2,8})\s+(\d{1,2}),?\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([APap][Mm]?\.?)?)?',
-  ).firstMatch(s);
-  if (m1 != null) {
-    final months = {
-      'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-      'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-    };
-    final mon = months[m1.group(1)!.substring(0, 3).toLowerCase()];
-    if (mon == null) return null;
-    final day = int.parse(m1.group(2)!);
-    final year = int.parse(m1.group(3)!);
-    int h = int.parse(m1.group(4) ?? '0');
-    final min = int.parse(m1.group(5) ?? '0');
-    final sec = int.parse((m1.group(6) ?? '0'));
-    final ampm = (m1.group(7) ?? '').toUpperCase();
-    if (ampm.startsWith('P') && h < 12) h += 12;
-    if (ampm.startsWith('A') && h == 12) h = 0;
-    return DateTime(year, mon, day, h, min, sec);
-  }
-  // "19/06/2026, 21:10:59"  or  "2026/05/28 18:24:51"  or  "2026-05-04 16:24:49"
-  for (final sep in ['/', '/', '-']) {
-    final pattern = sep == '/'
-        ? r'^(\d{1,2})/(\d{1,2})/(\d{4})[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?'
-        : r'^(\d{4})-(\d{1,2})-(\d{1,2})[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?';
-    final m2 = RegExp(pattern).firstMatch(s);
-    if (m2 != null) {
-      final a = int.parse(m2.group(1)!);
-      final b = int.parse(m2.group(2)!);
-      final c = int.parse(m2.group(3)!);
-      final h = int.parse(m2.group(4)!);
-      final min = int.parse(m2.group(5)!);
-      final sec = int.parse((m2.group(6) ?? '0'));
-      if (sep == '-') {
-        return DateTime(a, b, c, h, min, sec);
-      } else {
-        // DD/MM/YYYY or MM/DD/YYYY — assume DD/MM/YYYY
-        return DateTime(c, b, a, h, min, sec);
-      }
-    }
-  }
-  // date-only with no time component
-  final m3 = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(s);
-  if (m3 != null) {
-    return DateTime(int.parse(m3.group(3)!), int.parse(m3.group(2)!), int.parse(m3.group(1)!));
-  }
-  final m4 = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(s);
-  if (m4 != null) {
-    return DateTime(int.parse(m4.group(1)!), int.parse(m4.group(2)!), int.parse(m4.group(3)!));
-  }
-  return null;
-}
-
 class VerifyNotifier extends StateNotifier<VerifyState> {
   VerifyNotifier(this._repo, this._notifDatasource, this._txDatasource)
       : super(const VerifyState());
@@ -353,7 +291,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
   void setTransactionDate(String date) => state = state.copyWith(transactionDate: date);
   void setOrderTotal(double val) {
     final t = state.amount > val ? state.amount - val : 0.0;
-    state = state.copyWith(orderTotal: val, expectedAmount: val, tip: t);
+    state = state.copyWith(orderTotal: val, tip: t);
   }
   void setAmount(double amt) {
     final tip = amt > state.orderTotal ? amt - state.orderTotal : 0.0;
@@ -362,7 +300,15 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
   void setReceiptImage(String? path) => state = state.copyWith(receiptImage: path);
   void setOcrCompleted() => state = state.copyWith(ocrCompleted: true);
   void setAttemptCount(int n) => state = state.copyWith(attemptCount: n);
-  void setVerifyResult(VerifyResult? r) => state = state.copyWith(verifyResult: r);
+  void setVerifyResult(VerifyResult? r) => state = state.copyWith(
+    verifyResult: r,
+    dateElapsed: r?.dateElapsed ?? '',
+  );
+
+  void incrementAttempt() =>
+      state = state.copyWith(attemptCount: state.attemptCount + 1);
+
+  void setError(String msg) => state = state.copyWith(error: msg);
 
   Future<TransactionEntity> saveTransaction() async {
     final refCode = state.referenceCode;
@@ -377,8 +323,6 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       orderTotal: state.orderTotal,
       existingTransactions: existingTxs,
     );
-
-    print('[Verify] saving tx amount=${state.amount} ref=$refCode receiver=${state.receiverAccount} date=${state.transactionDate}');
 
     final tx = await _repo.createTransaction(
       bankName: bank,

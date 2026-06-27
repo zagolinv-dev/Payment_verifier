@@ -105,7 +105,8 @@ class OcrService {
   // --- geometry pairing for two-column tables (BOA, Awash) -------------------
   static const List<String> _tableLabels = [
     'Amount', 'Receiver Account', 'Receiver Name', 'Source Account',
-    'Source Account Name', 'Sender Account', 'Sender Name', 'Transaction Date',
+    'Source Account Name', 'Sender Account', 'Sender Name', 'Customer Name',
+    'Payer', 'Transaction Date',
     'Transaction Time', 'Transaction Reference', 'Transaction ID',
     'Transaction Number', 'Transaction To', 'Transaction Type', 'Beneficiary',
     'Reason', 'Note',
@@ -472,14 +473,30 @@ String? extractCustomerName(String text, {Map<String, String> geom = const {}}) 
   if (acc != null && looksLikeName(acc.group(1)!)) {
     return acc.group(1)!.replaceAll(RegExp(r'\s+'), ' ').trim().toUpperCase();
   }
-  // Label same-line
+  // Label same-line (non-greedy to avoid swallowing subsequent labels)
   final lbl = RegExp(
-    r'(?:Sender\s*Name|Source\s*Account\s*Name|Customer\s*Name|Payer)\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,40})',
+    r'(?:Sender\s*Name|Source\s*Account\s*Name|Customer\s*Name|Payer)\s*[:\-]?\s*'
+    r'([A-Za-z][A-Za-z .]{2,60}?)'
+    r'(?=\s+(?:Receiver|Amount|Transaction|Sender|Source|Customer|Payer|Reason|Note|\d)|\s*$)',
     caseSensitive: false,
   ).firstMatch(text);
-  if (lbl != null && looksLikeName(lbl.group(1)!)) {
-    return lbl.group(1)!.replaceAll(RegExp(r'\s+'), ' ').trim().toUpperCase();
+
+  String? tryName(String? raw) {
+    if (raw == null) return null;
+    final n = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (looksLikeName(n)) return n.toUpperCase();
+    // Strip trailing words that might be subsequent labels
+    final cleaned = n.replaceAll(
+      RegExp(r'\s+(?:Account|Bank|Name|Number|Ref|Reference|ID|Date|Time|Type|Note)\s*\S*$',
+          caseSensitive: false),
+      '',
+    ).trim();
+    if (looksLikeName(cleaned)) return cleaned.toUpperCase();
+    return null;
   }
+
+  final l = tryName(lbl?.group(1));
+  if (l != null) return l;
   // Label/value on separate lines (table receipts)
   final lines = text.split('\n');
   final labelRe = RegExp(
