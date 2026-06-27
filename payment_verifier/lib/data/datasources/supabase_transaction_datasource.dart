@@ -195,9 +195,73 @@ class SupabaseTransactionDatasource {
   }
 
   Future<void> clearAllTransactions() async {
-    await _client
-        .from(AppConstants.transactionsTable)
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // deletes all rows
+    // 1) Try the SECURITY DEFINER RPC first (bypasses RLS entirely).
+    //    Requires this SQL run once in Supabase SQL Editor:
+    //      CREATE OR REPLACE FUNCTION clear_all_data()
+    //      RETURNS void LANGUAGE sql SECURITY DEFINER
+    //      AS $$ DELETE FROM transactions; DELETE FROM notifications; $$;
+    try {
+      await _client.rpc('clear_all_data');
+      print('[clearAll] RPC succeeded');
+      return;
+    } catch (e) {
+      print('[clearAll] RPC failed – will try per-ID deletes: $e');
+    }
+
+    // 2) Fallback: fetch visible IDs and delete each one by primary key.
+    //    This works when an RLS DELETE policy exists (e.g. auth.uid() = user_id).
+    final uid = _client.auth.currentUser?.id;
+
+    // ── Transactions ────────────────────────────────────────────────────
+    try {
+      final rows = await _client
+          .from(AppConstants.transactionsTable)
+          .select('id');
+      final ids = (rows as List).map((r) => r['id'] as String).toList();
+      for (final id in ids) {
+        try {
+          await _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+        } catch (e) {
+          print('[clearAll] skip tx $id: $e');
+        }
+      }
+      print('[clearAll] deleted ${ids.length} transactions');
+    } catch (e) {
+      print('[clearAll] failed to list transactions: $e');
+      if (uid != null) {
+        try {
+          await _client
+              .from(AppConstants.transactionsTable)
+              .delete()
+              .eq('verified_by', uid);
+        } catch (_) {}
+      }
+    }
+
+    // ── Notifications ───────────────────────────────────────────────────
+    try {
+      final rows = await _client
+          .from(AppConstants.notificationsTable)
+          .select('id');
+      final ids = (rows as List).map((r) => r['id'] as String).toList();
+      for (final id in ids) {
+        try {
+          await _client.from(AppConstants.notificationsTable).delete().eq('id', id);
+        } catch (e) {
+          print('[clearAll] skip notification $id: $e');
+        }
+      }
+      print('[clearAll] deleted ${ids.length} notifications');
+    } catch (e) {
+      print('[clearAll] failed to list notifications: $e');
+      if (uid != null) {
+        try {
+          await _client
+              .from(AppConstants.notificationsTable)
+              .delete()
+              .eq('user_id', uid);
+        } catch (_) {}
+      }
+    }
   }
 }

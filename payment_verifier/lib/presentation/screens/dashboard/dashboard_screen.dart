@@ -14,6 +14,7 @@ import 'package:payment_verifier/domain/repositories/transaction_repository.dart
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
+import 'package:payment_verifier/presentation/providers/notification_provider.dart';
 import 'package:payment_verifier/presentation/widgets/kpi_card.dart';
 import 'package:payment_verifier/presentation/widgets/transaction_list_item.dart';
 import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
@@ -29,7 +30,7 @@ class DashboardScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final metricsAsync = ref.watch(dashboardMetricsProvider);
     final recentAsync = ref.watch(recentTransactionsProvider);
-    final isAdmin = ref.watch(isAdminProvider);
+    final isAdmin = user?.isAdmin ?? false;
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
 
@@ -474,6 +475,7 @@ Future<void> _showClearDataDialog(BuildContext context, WidgetRef ref) async {
       ref.invalidate(dashboardMetricsProvider);
       ref.invalidate(recentTransactionsProvider);
       ref.invalidate(transactionsProvider);
+      ref.invalidate(notificationsProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -485,10 +487,11 @@ Future<void> _showClearDataDialog(BuildContext context, WidgetRef ref) async {
         );
       }
     } catch (e) {
+      debugPrint('[ClearData] error: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to clear data: $e'),
+            content: Text('Clear failed — check RLS policy on transactions/notifications tables: $e'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

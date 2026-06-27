@@ -144,12 +144,36 @@ class OcrService {
         }
       }
       if (best != null && best.text.isNotEmpty) {
-        fields[label] = best.text.trim();
+        var value = best.text.trim();
+        if (best.rect != null) {
+          final br = best.rect!;
+          final idx = lines.indexOf(best);
+          for (int i = idx + 1; i < lines.length; i++) {
+            final l = lines[i];
+            if (l.rect == null) break;
+            if (l.rect!.top > br.bottom + br.height * 1.8) break;
+            if ((l.rect!.left - br.left).abs() > br.width * 0.25) break;
+            value += ' ${l.text.trim()}';
+          }
+        }
+        fields[label] = value;
         continue;
       }
       final sameLine = labelLine.text.replaceFirst(RegExp(lc, caseSensitive: false), '').trim();
       if (sameLine.isNotEmpty) {
-        fields[label] = sameLine.replaceAll(RegExp(r'^[:,\-]+\s*'), '').trim();
+        var value = sameLine.replaceAll(RegExp(r'^[:,\-]+\s*'), '').trim();
+        if (labelLine.rect != null) {
+          final lr = labelLine.rect!;
+          final idx = lines.indexOf(labelLine);
+          for (int i = idx + 1; i < lines.length; i++) {
+            final l = lines[i];
+            if (l.rect == null) break;
+            if (l.rect!.top > lr.bottom + lr.height * 1.8) break;
+            if (l.rect!.left < lr.center.dx) break;
+            value += ' ${l.text.trim()}';
+          }
+        }
+        fields[label] = value;
       }
     }
     return fields;
@@ -264,7 +288,9 @@ class OcrService {
     final t = text.toLowerCase();
     if (t.contains('fail') || t.contains('declined') || t.contains('unsuccess')) return 'failed';
     if (t.contains('pending') || t.contains('processing')) return 'pending';
-    if (t.contains('success') || t.contains('completed')) return 'success';
+    if (t.contains('success') || t.contains('completed') ||
+        t.contains('transfer successful') ||
+        t.contains('scan the qr') || t.contains('the choice for all')) return 'success';
     return 'unknown';
   }
 
@@ -274,6 +300,8 @@ class OcrService {
     if (t.contains('m-pesa') || t.contains('mpesa')) return 'mpesa';
     if (t.contains('cbe birr')) return 'cbe_birr';
     if (t.contains('awashbank') || t.contains('awash bank') || t.contains('awashbirr')) return 'awash';
+    // Zemen Gebeya is the telebirr-powered marketplace
+    if (t.contains('zemen') && (t.contains('gebeya') || t.contains('transaction to') || t.contains('transaction number'))) return 'telebirr';
     if (t.contains('zemen')) return 'zemen';
     if (t.contains('dashen')) return 'dashen';
     if (t.contains('bank of abyssinia') || t.contains('source account') || t.contains('the choice for all')) return 'boa';

@@ -85,31 +85,30 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
         ref.read(verifyProvider.notifier).setAmount(double.parse(result.amount!));
       }
 
+      final notifier = ref.read(verifyProvider.notifier);
+      notifier.setOcrRawText(result.rawText);
+      notifier.setOcrCompleted();
+
       // ── Resolve reference (normalise OCR letter↔digit swaps) ────────
       if (result.hasReference) {
-        final normalized = normalizeFTReference(result.reference!);
-        ref.read(verifyProvider.notifier).setCode(normalized);
-        // Kick off the real backend fetch with retry logic.
-        ref.read(verifyProvider.notifier).fetchReceipt(normalized);
+        notifier.setCode(normalizeFTReference(result.reference!));
       }
 
       final bank = _mapPaymentMethodToBank(result.paymentMethod);
       if (bank != null) {
         debugPrint('[OCR] mapped bank: $bank');
-        ref.read(verifyProvider.notifier).setBank(bank);
-        ref.read(verifyProvider.notifier).setOcrDetectedBank(bank);
+        notifier.setBank(bank);
+        notifier.setOcrDetectedBank(bank);
       }
 
       // ── Resolve receiver account ───────────────────────────────────
       if (result.receiverAccount != null && result.receiverAccount!.isNotEmpty) {
         _receiverAcctController.text = result.receiverAccount!;
-        ref.read(verifyProvider.notifier).setReceiverAccount(result.receiverAccount!);
+        notifier.setReceiverAccount(result.receiverAccount!);
       }
 
       // ── Resolve customer name ───────────────────────────────────────
-      String? resolvedCustomer = result.customerName ?? result.receiverName;
-      // Line breaks inside the name (e.g. CBE "Arsema\nTewodros") break the
-      // extractor's character class; retry with normalized whitespace.
+      String? resolvedCustomer = result.customerName;
       if (resolvedCustomer == null && result.rawText.isNotEmpty) {
         resolvedCustomer = extractCustomerName(
           result.rawText.replaceAll('\n', ' '),
@@ -120,25 +119,62 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
         if (_buyerController.text.isEmpty) {
           _buyerController.text = resolvedCustomer;
         }
-        ref.read(verifyProvider.notifier).setBuyerName(resolvedCustomer);
+        notifier.setBuyerName(resolvedCustomer);
       }
 
       if (result.receiverName != null && result.receiverName!.isNotEmpty) {
-        ref.read(verifyProvider.notifier).setReceiverName(result.receiverName!);
+        notifier.setReceiverName(result.receiverName!);
       }
 
       // ── Resolve date ────────────────────────────────────────────────
       if (result.date != null && result.date!.isNotEmpty) {
-        ref.read(verifyProvider.notifier).setTransactionDate(result.date!);
+        notifier.setTransactionDate(result.date!);
       }
 
-      ref.read(verifyProvider.notifier).setOcrRawText(result.rawText);
       setState(() {
         _ocrStatus = 'OCR complete — ${result.rawText.length} chars';
         _isOcrRunning = false;
       });
-      ref.read(verifyProvider.notifier).setOcrCompleted();
-      _runVerificationCheck();
+
+      // ── Run verification via VerificationService ──────────────────
+      final st = ref.read(verifyProvider);
+      final accounts = ref.read(bankAccountsProvider).valueOrNull ?? [];
+      final businessAccounts = accounts.map((a) => a.accountNumber).toList();
+      // ignore: invalid_use_of_internal_member
+      final txRepo = ref.read(transactionRepositoryProvider);
+      final service = VerificationService(
+        config: VerifyConfig(
+          expectedAmount: st.orderTotal > 0 ? st.orderTotal : null,
+          businessAccounts: businessAccounts,
+          businessName: null,
+          freshnessWindow: const Duration(hours: 24),
+        ),
+        fetch: null,
+        isDuplicate: (code) async {
+          try {
+            final existingTxs = await txRepo.getTransactions();
+            final normalized = normalizeFTReference(code);
+            final dup = existingTxs.where((t) =>
+                normalizeFTReference(t.referenceCode) == normalized).toList();
+            if (dup.isNotEmpty) return dup.last.createdAt;
+          } catch (_) {}
+          return null;
+        },
+      );
+      final verifyResult = await service.verify(result, qrData: null);
+      notifier.setVerifyResult(verifyResult);
+      debugPrint('[Verify] verdict="${verifyResult.verdict.label}" '
+          '${verifyResult.steps.where((s) => s.passed).length}/${verifyResult.steps.length} passed');
+
+      // Save reference when verdict is looksGenuine or verified.
+      if (verifyResult.verdict == Verdict.looksGenuine || verifyResult.verdict == Verdict.verified) {
+        try {
+          await notifier.saveTransaction();
+          debugPrint('[Verify] transaction saved on verdict=${verifyResult.verdict.label}');
+        } catch (e) {
+          debugPrint('[Verify] saveTransaction error: $e');
+        }
+      }
     } catch (e) {
       debugPrint('[OCR] failed: $e');
       setState(() {
@@ -221,69 +257,21 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
         final dateStr = '${_monthAbbr(now.month)} ${now.day}, ${now.year} $h:${now.minute.toString().padLeft(2, '0')} $ampm';
         ref.read(verifyProvider.notifier).setTransactionDate(dateStr);
         _processOcr(file.path);
-        _runVerificationCheck();
       }
-    }
-  }
-
-  void _runVerificationCheck() {
-    final st = ref.read(verifyProvider);
-    debugPrint('[Verify] runLiveCheck: bank="${st.selectedBank}" amount=${st.amount} ref="${st.referenceCode}" orderTotal=${st.orderTotal} receiver="${st.receiverAccount}"');
-    if (st.selectedBank != null && st.amount > 0 && _selectedImage != null) {
-      ref.read(verifyProvider.notifier).runLiveCheck();
-    }
-
-    final accounts = ref.read(bankAccountsProvider).valueOrNull ?? [];
-    if (st.receiverAccount.isNotEmpty) {
-      if (accounts.isEmpty) {
-        ref.read(verifyProvider.notifier).setAccountMatch(false, 'no business account configured');
-        debugPrint('[Verify] accountMatch: no accounts configured — set one in settings');
-      } else {
-        final normalized = st.receiverAccount.replaceAll(RegExp(r'[\s-]+'), '');
-        // Extract the visible suffix from the masked receipt number.
-        // e.g. "1*****127" → suffix "127", "01347******0700" → suffix "0700"
-        final suffix = normalized.contains('*')
-            ? normalized.split('*').last
-            : normalized; // if not masked, use the whole number
-        debugPrint('[Verify] accountMatch: receipt="$normalized" suffix="$suffix"');
-        String? matched;
-        for (final acct in accounts) {
-          final stored = acct.accountNumber.replaceAll(RegExp(r'[\s-]+'), '');
-          if (stored.endsWith(suffix)) {
-            matched = acct.accountNumber;
-            break;
-          }
-        }
-        final passed = matched != null;
-        final note = matched != null
-            ? 'suffix match: $matched (ends with $suffix)'
-            : 'no account ending with "$suffix" found';
-        ref.read(verifyProvider.notifier).setAccountMatch(passed, '${st.receiverAccount} vs $note');
-        debugPrint('[Verify] accountMatch: passed=$passed note=$note');
-      }
-    }
-
-    if (st.referenceCode.isNotEmpty) {
-      ref.read(verifyProvider.notifier).checkDuplicate();
-    }
-
-    if (st.transactionDate.isNotEmpty) {
-      ref.read(verifyProvider.notifier).runDateFreshnessCheck();
     }
   }
 
   Future<void> _verify() async {
     if (!_formKey.currentState!.validate()) return;
-    final user = ref.read(currentUserProvider);
-    // Run freshness check before verifying
-    ref.read(verifyProvider.notifier).runDateFreshnessCheck();
-    await ref.read(verifyProvider.notifier).verify(
-      waiterName: user?.id,
-      managerName: user?.displayName,
-    );
-    final st = ref.read(verifyProvider);
-    if (st.result != null || st.error != null) {
-      _resultAnim.forward(from: 0);
+    final notifier = ref.read(verifyProvider.notifier);
+    try {
+      final tx = await notifier.saveTransaction();
+      final st = ref.read(verifyProvider);
+      if (st.result != null) {
+        _resultAnim.forward(from: 0);
+      }
+    } catch (e) {
+      debugPrint('[Verify] save failed: $e');
     }
   }
 
@@ -373,10 +361,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                 const SizedBox(height: 8),
                 _BankDropdown(
                     value: state.selectedBank,
-                    onChanged: (b) {
-                      notifier.setBank(b);
-                      _runVerificationCheck();
-                    },
+                    onChanged: notifier.setBank,
                     isDark: isDark,
                     activeBanks: bankAccountsAsync.when(
                       data: (a) => a.where((x) => x.isActive).map((x) => x.bankName).toSet(),
@@ -396,10 +381,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                           ? AppTheme.textTertiary
                           : AppTheme.lightTextTertiary,
                       size: 20),
-                  onChanged: (v) {
-                    notifier.setOrderTotal(double.tryParse(v) ?? 0);
-                    _runVerificationCheck();
-                  },
+                  onChanged: (v) => notifier.setOrderTotal(double.tryParse(v) ?? 0),
                   validator: (v) {
                     if (v == null || v.isEmpty) return null;
                     final d = double.tryParse(v);
@@ -519,10 +501,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                           ? AppTheme.textTertiary
                           : AppTheme.lightTextTertiary,
                       size: 20),
-                  onChanged: (v) {
-                    notifier.setReceiverAccount(v);
-                    _runVerificationCheck();
-                  },
+                  onChanged: notifier.setReceiverAccount,
                 ),
                 const SizedBox(height: 20),
 
@@ -537,10 +516,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen>
                           ? AppTheme.textTertiary
                           : AppTheme.lightTextTertiary,
                       size: 20),
-                  onChanged: (v) {
-                    notifier.setAmount(double.tryParse(v) ?? 0);
-                    _runVerificationCheck();
-                  },
+                  onChanged: (v) => notifier.setAmount(double.tryParse(v) ?? 0),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Required';
                     final d = double.tryParse(v);
@@ -890,244 +866,23 @@ class _VerificationResult extends StatelessWidget {
   }
 
   List<_StepData> _buildSteps() {
-    final st = state;
-    final raw = st.ocrRawText;
+    final result = state.verifyResult;
+    if (result == null) return [];
 
-    // ── Resolve all OCR fields from state ───────────────────────────────
-
-    final resolvedBank = st.selectedBank;
-    final nameRaw = raw.isNotEmpty
-        ? extractCustomerName(raw.replaceAll('\n', ' '), geom: {})
-        : null;
-    debugPrint('[buildSteps] raw.length=${raw.length} buyerName="${st.buyerName}" nameRaw="$nameRaw"');
-    final resolvedCustomer = st.buyerName.isNotEmpty ? st.buyerName : nameRaw;
-    final resolvedAmount = st.amount > 0 ? st.amount : null;
-    final resolvedReceiverAcct = st.receiverAccount.isNotEmpty
-        ? st.receiverAccount
-        : null;
-    final resolvedDate = st.transactionDate.isNotEmpty ? st.transactionDate : null;
-
-    final ref = st.referenceCode;
-
-    // ── Debug output matching spec ──────────────────────────────────────
-    print('[Verify] name=$nameRaw '
-        'ref=$ref '
-        'amount=${resolvedAmount?.toStringAsFixed(2) ?? 'null'} '
-        'receiver=${resolvedReceiverAcct ?? 'null'} '
-        'date=${resolvedDate ?? 'null'} '
-        'now=${DateTime.now()} '
-        'attempt=${st.attemptCount + 1}');
-
-    // ── Step: Detect payment method ─────────────────────────────────────
-    final methodPassed = resolvedBank != null;
-    final methodValue = resolvedBank ?? 'Not detected';
-
-    // ── Step: Bank mismatch (dropdown vs OCR) ──────────────────────────
-    final detected = st.ocrDetectedBank;
-    final selected = st.selectedBank;
-    bool bankMatchPassed;
-    String bankMatchValue;
-    if (detected != null && selected != null && detected != selected) {
-      bankMatchPassed = false;
-      bankMatchValue = 'Receipt: "$detected" ≠ Selected: "$selected"';
-    } else if (detected != null && selected != null && detected == selected) {
-      bankMatchPassed = true;
-      bankMatchValue = 'Receipt matched selection';
-    } else if (detected == null) {
-      bankMatchPassed = true; // cannot verify, skip
-      bankMatchValue = 'No receipt bank detected';
-    } else {
-      bankMatchPassed = true;
-      bankMatchValue = 'No bank selected';
-    }
-
-    // ── Step: Customer name ─────────────────────────────────────────────
-    final namePassed = resolvedCustomer != null;
-    final nameValue = resolvedCustomer ?? 'Not found';
-
-    // ── Step: Fetch receipt page (real backend, 10s timeout) ──────────
-    final fr = st.fetchResult;
-    bool fetchPassed;
-    String fetchValue;
-    if (fr == null && st.referenceCode.isEmpty) {
-      fetchPassed = false;
-      fetchValue = 'No reference found';
-    } else if (fr == null) {
-      fetchPassed = false;
-      fetchValue = 'Fetching TX: $ref …';
-    } else if (fr.found) {
-      fetchPassed = true;
-      fetchValue = 'Confirmed: ${fr.amount?.toStringAsFixed(2) ?? ""} ETB → ${fr.receiverAccount ?? ref}';
-    } else {
-      fetchPassed = false;
-      fetchValue = 'Could not confirm (${fr.error ?? "not found"})';
-    }
-
-    // ── Step: Extract amount ────────────────────────────────────────────
-    final amountExtracted = resolvedAmount != null && resolvedAmount > 0;
-    final resolvedAmt = resolvedAmount;
-    final amountValue = amountExtracted && resolvedAmt != null
-        ? '${resolvedAmt.toStringAsFixed(0)} ETB${st.expectedAmount > 0 ? ' (expected: ${st.expectedAmount.toStringAsFixed(0)} ETB)' : ''}'
-        : 'Not found';
-
-    // ── Step: Amount match (5% tolerance) ──────────────────────────────
-    final hasRealExpected = st.expectedAmount > 0 && amountExtracted && resolvedAmt != null;
-    final diffPct = hasRealExpected ? ((resolvedAmt - st.expectedAmount).abs() / st.expectedAmount * 100) : 0.0;
-    final amtMatchPassed = hasRealExpected && diffPct <= 5.0;
-    final amtMatchValue = hasRealExpected
-        ? '${diffPct.toStringAsFixed(1)}% difference'
-        : (st.expectedAmount <= 0 ? 'No expected amount set' : 'Amount not extracted');
-
-    // ── Step: Extract receiver account ──────────────────────────────────
-    final rcvrExtracted = resolvedReceiverAcct != null && resolvedReceiverAcct.isNotEmpty;
-    final rcvrValue = resolvedReceiverAcct ?? 'Not found';
-
-    // ── Step: Receiver account match ────────────────────────────────────
-    bool accMatchPassed = false;
-    String accMatchValue;
-    if (rcvrExtracted) {
-      if (st.accountMatchNote.isNotEmpty) {
-        accMatchPassed = st.accountMatchPassed;
-        accMatchValue = st.accountMatchPassed
-            ? 'Passed — ${st.accountMatchNote}'
-            : 'Failed — ${st.accountMatchNote}';
-      } else if (bankAccounts.isEmpty) {
-        accMatchValue = 'Business account not set';
-      } else {
-        accMatchValue = 'No matching account';
-      }
-    } else {
-      accMatchValue = 'Receiver account not found';
-    }
-
-    // ── Step: Transaction date ─────────────────────────────────────────
-    final dateExtracted = resolvedDate != null && resolvedDate.isNotEmpty;
-    final dateValue = resolvedDate ?? 'Not found';
-
-    // ── Step: Date freshness ───────────────────────────────────────────
-    bool freshnessPassed = false;
-    String freshnessValue;
-    if (st.dateFreshnessNote.isNotEmpty) {
-      freshnessPassed = st.dateFreshnessPassed;
-      freshnessValue = st.dateFreshnessPassed
-          ? 'Fresh — ${st.dateFreshnessNote}'
-          : st.dateFreshnessNote;
-    } else if (dateExtracted) {
-      freshnessValue = 'Pending check';
-    } else {
-      freshnessValue = 'Date not found';
-    }
-
-    // ── Step: Duplicate check ──────────────────────────────────────────
-    bool dupPassed = false;
-    String dupValue;
-    if (st.duplicateCheckNote.isNotEmpty) {
-      dupPassed = st.duplicateCheckPassed;
-      dupValue = st.duplicateCheckPassed
-          ? st.duplicateCheckNote
-          : st.duplicateCheckNote;
-    } else if (st.referenceCode.isNotEmpty && st.hasVerified) {
-      dupValue = 'Pending check';
-    } else if (st.referenceCode.isEmpty) {
-      dupValue = 'No reference to check';
-    } else {
-      dupValue = 'Pending check';
-    }
-
-    // ── Verdict ─────────────────────────────────────────────────────────
-    final criticalPassed = namePassed && methodPassed && fetchPassed &&
-        amountExtracted && amtMatchPassed && rcvrExtracted &&
-        accMatchPassed && dateExtracted && freshnessPassed && dupPassed &&
-        bankMatchPassed;
-    final hasHardFail = (!dupPassed && dupValue.contains('Already used')) ||
-        (st.dateFreshnessNote.contains('future-dated') ||
-         st.dateFreshnessNote.contains('too old')) ||
-        (!accMatchPassed && accMatchValue.contains('Failed'));
-    final hasSoftFail = !criticalPassed && !hasHardFail;
-
-    String verdictLabel;
-    bool verdictPassed;
-    if (st.hasVerified && criticalPassed) {
-      verdictLabel = 'Verified';
-      verdictPassed = true;
-    } else if (st.hasVerified && hasHardFail) {
-      verdictLabel = 'Rejected';
-      verdictPassed = false;
-    } else if (st.hasVerified && hasSoftFail) {
-      verdictLabel = 'Review (needs owner)';
-      verdictPassed = false;
-    } else if (st.showFinalRejected) {
-      verdictLabel = 'This receipt is not valid';
-      verdictPassed = false;
-    } else {
-      verdictLabel = 'Not yet verified';
-      verdictPassed = false;
-    }
-
-    VStepState stepState(bool p) => p ? VStepState.pass : VStepState.fail;
-
-    return [
-      _StepData(icon: Icons.account_balance_rounded,
-        label: 'Detect payment method',
-        value: methodValue,
-        state: stepState(methodPassed),
-        percent: methodPassed ? 100.0 : 0.0),
-      _StepData(icon: Icons.compare_arrows_rounded,
-        label: 'Bank matches selection',
-        value: bankMatchValue,
-        state: bankMatchPassed ? VStepState.pass : VStepState.review,
-        percent: bankMatchPassed ? 100.0 : 0.0),
-      _StepData(icon: Icons.person_outline_rounded,
-        label: 'Customer name',
-        value: nameValue,
-        state: stepState(namePassed),
-        percent: namePassed ? 100.0 : 0.0),
-      _StepData(icon: Icons.receipt_rounded,
-        label: 'Fetch receipt page',
-        value: fetchValue,
-        state: fetchPassed ? VStepState.pass : (fr == null ? VStepState.review : VStepState.review),
-        percent: fetchPassed ? 100.0 : 0.0),
-      _StepData(icon: Icons.monetization_on_rounded,
-        label: 'Extract amount',
-        value: amountValue,
-        state: stepState(amountExtracted),
-        percent: amountExtracted ? 100.0 : 0.0),
-      _StepData(icon: Icons.compare_arrows_rounded,
-        label: 'Amount match (5% tolerance)',
-        value: amtMatchValue,
-        state: stepState(amtMatchPassed),
-        percent: amtMatchPassed ? 100.0 : 0.0),
-      _StepData(icon: Icons.credit_card_rounded,
-        label: 'Extract receiver account',
-        value: rcvrValue,
-        state: stepState(rcvrExtracted),
-        percent: rcvrExtracted ? 100.0 : 0.0),
-      _StepData(icon: Icons.compare_arrows_rounded,
-        label: 'Receiver account match',
-        value: accMatchValue,
-        state: stepState(accMatchPassed),
-        percent: accMatchPassed ? 100.0 : 0.0),
-      _StepData(icon: Icons.calendar_today_rounded,
-        label: 'Transaction date',
-        value: dateValue,
-        state: stepState(dateExtracted),
-        percent: dateExtracted ? 100.0 : 0.0),
-      _StepData(icon: Icons.access_time_rounded,
-        label: 'Date freshness',
-        value: freshnessValue,
-        state: stepState(freshnessPassed),
-        percent: freshnessPassed ? 100.0 : 0.0),
-      _StepData(icon: Icons.verified_user_rounded,
-        label: 'Duplicate check',
-        value: dupValue,
-        state: stepState(dupPassed),
-        percent: dupPassed ? 100.0 : 0.0),
-      _StepData(icon: Icons.gavel_rounded,
-        label: 'Verdict',
-        value: verdictLabel,
-        state: verdictPassed ? VStepState.pass : (verdictLabel == 'Review (needs owner)' || verdictLabel == 'Not yet verified' ? VStepState.review : VStepState.fail),
-        percent: verdictPassed ? 100.0 : 0.0),
-    ];
+    final converter = _VStepConverter();
+    final steps = result.steps.map(converter.convert).toList();
+    steps.add(_StepData(
+      icon: Icons.gavel_rounded,
+      label: 'Verdict',
+      value: result.verdict.label,
+      state: result.verdict == Verdict.rejected
+          ? VStepState.fail
+          : result.verdict == Verdict.review
+              ? VStepState.review
+              : VStepState.pass,
+      percent: result.verdict == Verdict.rejected ? 0.0 : 100.0,
+    ));
+    return steps;
   }
 }
 
@@ -1166,6 +921,35 @@ class _ExtractedField extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Maps a [VStep] from [VerificationService] to a UI [_StepData].
+class _VStepConverter {
+  IconData _iconFor(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('payment') || n.contains('method')) return Icons.account_balance_rounded;
+    if (n.contains('qr')) return Icons.qr_code_rounded;
+    if (n.contains('customer') || n.contains('name')) return Icons.person_outline_rounded;
+    if (n.contains('amount') && n.contains('match')) return Icons.compare_arrows_rounded;
+    if (n.contains('amount')) return Icons.monetization_on_rounded;
+    if (n.contains('receiver') && (n.contains('match') || n.contains('name'))) return Icons.compare_arrows_rounded;
+    if (n.contains('receiver') || n.contains('account')) return Icons.credit_card_rounded;
+    if (n.contains('duplicate')) return Icons.verified_user_rounded;
+    if (n.contains('fresh') || n.contains('date')) return Icons.access_time_rounded;
+    if (n.contains('status') || n.contains('bank')) return Icons.account_balance_rounded;
+    if (n.contains('fetch') || n.contains('confirm')) return Icons.cloud_download_rounded;
+    return Icons.circle_rounded;
+  }
+
+  _StepData convert(VStep step) {
+    return _StepData(
+      icon: _iconFor(step.name),
+      label: step.name,
+      value: step.value,
+      state: step.state,
+      percent: step.passed ? 100.0 : 0.0,
     );
   }
 }
