@@ -8,17 +8,11 @@ import DashboardLayout from "../dashboard-layout";
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState({ message: "", type: "info" });
 
-  useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
-    loadData();
-  }, []);
-
-  useEffect(() => { localStorage.setItem("adminDarkMode", JSON.stringify(darkMode)); }, [darkMode]);
+  useEffect(() => { loadData(); }, []);
 
   const showToast = (msg, type = "success") => {
     setToast({ message: msg, type });

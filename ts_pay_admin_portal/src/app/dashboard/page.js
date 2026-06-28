@@ -20,20 +20,13 @@ export default function DashboardPage() {
   const [bankDistribution, setBankDistribution] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
 
   const deleteTransaction = async (id) => {
     if (!confirm("Delete this transaction?")) return;
     await supabase.from("transactions").delete().eq("id", id);
     setRecentActivity((prev) => prev.filter((tx) => tx.id !== id));
   };
-
-  useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
-  }, []);
-
-  useEffect(() => { localStorage.setItem("adminDarkMode", JSON.stringify(darkMode)); }, [darkMode]);
 
   useEffect(() => { loadData(); }, []);
 

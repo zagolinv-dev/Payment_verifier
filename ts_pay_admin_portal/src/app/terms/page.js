@@ -59,12 +59,10 @@ These terms are governed by the laws of the Federal Democratic Republic of Ethio
 For questions about these terms, contact support@tspay.com`;
 
 export default function TermsPage() {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
   const [content, setContent] = useState(DEFAULT_TERMS);
 
   useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
     const handler = (e) => setDarkMode(e.detail);
     window.addEventListener("darkmodechange", handler);
     loadContent();

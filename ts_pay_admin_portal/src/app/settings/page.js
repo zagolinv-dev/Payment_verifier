@@ -6,16 +6,9 @@ import { CheckCircleIcon, XCircleIcon, EyeIcon, EyeOffIcon, UserIcon, UserPlusIc
 import DashboardLayout from "../dashboard-layout";
 
 export default function SettingsPage() {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
   const [toast, setToast] = useState({ message: "", type: "info" });
   const [activeSection, setActiveSection] = useState("profile");
-
-  useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
-  }, []);
-
-  useEffect(() => { localStorage.setItem("adminDarkMode", JSON.stringify(darkMode)); }, [darkMode]);
 
   const showToast = (msg, type = "success") => {
     setToast({ message: msg, type });
