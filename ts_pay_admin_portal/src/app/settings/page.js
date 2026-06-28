@@ -2,22 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { CheckCircleIcon, SettingsIcon } from "@/components/Icons";
+import { CheckCircleIcon, XCircleIcon, EyeIcon, EyeOffIcon, UserIcon, UserPlusIcon, LockIcon } from "@/components/Icons";
 import DashboardLayout from "../dashboard-layout";
-
-const defaultSettings = { commissionFee: "1.0", minPayout: "5,000", ocrConfidence: "85", autoVerify: true };
 
 export default function SettingsPage() {
   const [darkMode, setDarkMode] = useState(true);
-  const [settings, setSettings] = useState(defaultSettings);
   const [toast, setToast] = useState({ message: "", type: "info" });
-  const [saving, setSaving] = useState(false);
-  const [dbReady, setDbReady] = useState(false);
+  const [activeSection, setActiveSection] = useState("profile");
 
   useEffect(() => {
     const stored = localStorage.getItem("adminDarkMode");
     if (stored !== null) setDarkMode(JSON.parse(stored));
-    loadSettings();
   }, []);
 
   useEffect(() => { localStorage.setItem("adminDarkMode", JSON.stringify(darkMode)); }, [darkMode]);
@@ -27,54 +22,15 @@ export default function SettingsPage() {
     setTimeout(() => setToast({ message: "", type: "info" }), 4000);
   };
 
-  const loadSettings = async () => {
-    const { data, error } = await supabase.from("platform_settings").select("*").limit(1).maybeSingle();
-    if (!error && data) {
-      setSettings({
-        commissionFee: String(data.commission_fee ?? "1.0"),
-        minPayout: String(data.min_payout ?? "5,000"),
-        ocrConfidence: String(data.ocr_confidence ?? "85"),
-        autoVerify: data.auto_verify ?? true,
-      });
-      setDbReady(true);
-    } else {
-      const saved = localStorage.getItem("platformSettings");
-      if (saved) setSettings(JSON.parse(saved));
-      setDbReady(false);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      if (dbReady) {
-        const existing = await supabase.from("platform_settings").select("id").limit(1).maybeSingle();
-        const payload = {
-          commission_fee: parseFloat(settings.commissionFee) || 1.0,
-          min_payout: parseFloat(settings.minPayout.replace(/,/g, "")) || 5000,
-          ocr_confidence: parseFloat(settings.ocrConfidence) || 85,
-          auto_verify: settings.autoVerify,
-        };
-        if (existing.data?.id) await supabase.from("platform_settings").update(payload).eq("id", existing.data.id);
-        else await supabase.from("platform_settings").insert(payload);
-      }
-      localStorage.setItem("platformSettings", JSON.stringify(settings));
-      showToast("System parameters updated and applied across nodes.", "success");
-    } catch (err) {
-      localStorage.setItem("platformSettings", JSON.stringify(settings));
-      showToast("Saved locally. Run migration to enable database sync.", "info");
-    } finally { setSaving(false); }
-  };
-
   return (
     <DashboardLayout darkMode={darkMode} setDarkMode={setDarkMode}>
       <div className="space-y-6 animate-scaleIn">
         <div>
           <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${darkMode ? "text-white" : "text-zinc-900"}`}>
-            Platform Settings
+            Settings
           </h1>
           <p className={`text-xs mt-1 ${darkMode ? "text-zinc-500" : "text-zinc-500"}`}>
-            Global fees, rules, and matching parameters
+            Manage your profile, admins, and security
           </p>
         </div>
 
@@ -84,117 +40,421 @@ export default function SettingsPage() {
             toast.type === "error" ? "bg-rose-500/10 border-rose-500/20 text-rose-400" :
             "bg-amber-500/10 border-amber-500/20 text-amber-400"
           }`}>
-            <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            {toast.type === "success" ? <CheckCircleIcon className="w-5 h-5 flex-shrink-0" /> : <XCircleIcon className="w-5 h-5 flex-shrink-0" />}
             <span className="text-sm font-semibold">{toast.message}</span>
           </div>
         )}
 
-        <div className="max-w-2xl">
-          <div className={`relative overflow-hidden rounded-2xl p-6 sm:p-8 border transition-all ${
-            darkMode ? "bg-[#0F1626]/80 backdrop-blur-xl border-white/[0.06]" : "bg-white/80 backdrop-blur-xl border-black/5 shadow-sm"
-          }`}>
-            <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none ${darkMode ? "bg-emerald-500/5" : "bg-emerald-500/3"}`} />
-
-            <div className={`relative flex items-center gap-3 mb-6 pb-5 border-b ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"
-              }`}>
-                <SettingsIcon className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>Global Fees & Parameters</h3>
-                <p className={`text-[10px] ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
-                  Configure platform-wide rules
-                </p>
-              </div>
-            </div>
-
-            <div className="relative space-y-5">
-              <SettingField
-                darkMode={darkMode}
-                label="Default Transaction Commission Fee"
-                value={settings.commissionFee}
-                onChange={(v) => setSettings({ ...settings, commissionFee: v })}
-                suffix="%"
-                description="Platform fee charged automatically per verified transaction split."
-              />
-              <SettingField
-                darkMode={darkMode}
-                label="Minimum Settlement Payout"
-                value={settings.minPayout}
-                onChange={(v) => setSettings({ ...settings, minPayout: v })}
-                suffix="ETB"
-                description="Threshold amount required to release auto bank settlements."
-              />
-              <SettingField
-                darkMode={darkMode}
-                label="Receipt OCR Verification Threshold"
-                value={settings.ocrConfidence}
-                onChange={(v) => setSettings({ ...settings, ocrConfidence: v })}
-                suffix="%"
-                description="Matching score required to automatically verify scanned image payments."
-              />
-
-              <div className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                darkMode ? "bg-[#182235] border-white/[0.06]" : "bg-zinc-50 border-black/5"
-              }`}>
-                <div>
-                  <div className={`text-xs font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>Auto-Verify matching codes</div>
-                  <p className={`text-[10px] mt-0.5 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
-                    Let verified OCR references immediately update status.
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.autoVerify}
-                    onChange={(e) => setSettings({ ...settings, autoVerify: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div className={`w-10 h-5 rounded-full peer peer-checked:after:translate-x-5 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${
-                    darkMode ? "bg-white/10 peer-checked:bg-emerald-500" : "bg-zinc-200 peer-checked:bg-emerald-500"
-                  }`} />
-                </label>
-              </div>
-            </div>
-
-            <div className={`relative pt-5 mt-5 border-t ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-50 transition-all cursor-pointer text-xs"
-              >
-                {saving ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border-2 border-zinc-950/30 border-t-zinc-950 rounded-full animate-spin" />
-                    Saving...
-                  </span>
-                ) : "Save Platform Rules"}
-              </button>
-            </div>
-          </div>
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { key: "profile", label: "My Profile", icon: UserIcon },
+            { key: "admin", label: "Add Superadmin", icon: UserPlusIcon },
+            { key: "password", label: "Change Password", icon: LockIcon },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveSection(key)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold tracking-wide transition-all cursor-pointer ${
+                activeSection === key
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-lg shadow-emerald-500/10"
+                  : `${darkMode ? "bg-[#0F1626]/80 border-white/[0.06] text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12]" : "bg-white/80 border-black/5 text-zinc-600 hover:text-zinc-900 hover:border-black/10 shadow-sm"}`
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
         </div>
+
+        {activeSection === "profile" && <ProfileSection darkMode={darkMode} showToast={showToast} />}
+        {activeSection === "admin" && <AddSuperadminSection darkMode={darkMode} showToast={showToast} />}
+        {activeSection === "password" && <ChangePasswordSection darkMode={darkMode} showToast={showToast} />}
       </div>
     </DashboardLayout>
   );
 }
 
-function SettingField({ darkMode, label, value, onChange, suffix, description }) {
-  return (
-    <div>
-      <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>{label}</label>
-      <div className="relative">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={`w-full text-xs font-bold px-4 py-3 rounded-xl border outline-none transition-all ${
-            darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"
-          }`}
-        />
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 font-bold text-xs">{suffix}</span>
+function ProfileSection({ darkMode, showToast }) {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [newEmail, setNewEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  useEffect(() => { loadProfile(); }, []);
+
+  const loadProfile = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      setUser(session.user);
+      setNewEmail(session.user.email || "");
+      const { data: p } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
+      setProfile(p);
+    } catch (err) { console.error("Failed to load profile:", err); }
+    finally { setLoading(false); }
+  };
+
+  const handleChangeEmail = async (e) => {
+    e.preventDefault();
+    setSavingEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      if (error) throw error;
+      showToast("Confirmation email sent. Please check your inbox.", "success");
+    } catch (err) { showToast(err.message, "error"); }
+    finally { setSavingEmail(false); }
+  };
+
+  if (loading) {
+    return (
+      <div className={`relative overflow-hidden rounded-2xl p-8 border transition-all ${darkMode ? "bg-[#0F1626]/80 border-white/[0.06]" : "bg-white/80 border-black/5 shadow-sm"}`}>
+        <div className="flex items-center justify-center h-32">
+          <div className="flex gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+          </div>
+        </div>
       </div>
-      <p className={`text-[10px] mt-1.5 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>{description}</p>
+    );
+  }
+
+  return (
+    <div className={`relative overflow-hidden rounded-2xl border transition-all ${darkMode ? "bg-[#0F1626]/80 backdrop-blur-xl border-white/[0.06]" : "bg-white/80 backdrop-blur-xl border-black/5 shadow-sm"}`}>
+      <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none ${darkMode ? "bg-emerald-500/5" : "bg-emerald-500/3"}`} />
+      <div className="p-6 sm:p-8">
+        <div className={`relative flex items-center gap-4 mb-6 pb-5 border-b ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
+          <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-lg font-bold ${
+            darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"
+          }`}>
+            {(profile?.full_name || "A")[0]}
+          </div>
+          <div>
+            <h3 className={`text-base font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>{profile?.full_name || "Super Admin"}</h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border border-emerald-500/20">
+                {profile?.role || "ADMIN"}
+              </span>
+              <span className={`text-[10px] ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>{user?.email}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative grid grid-cols-2 gap-4 text-sm mb-6">
+          <div>
+            <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Email</div>
+            <div className={`font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>{user?.email}</div>
+          </div>
+          <div>
+            <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Full Name</div>
+            <div className={`font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>{profile?.full_name || "Super Admin"}</div>
+          </div>
+          <div>
+            <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Role</div>
+            <div className="font-bold">
+              <span className="bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border border-emerald-500/20">
+                {profile?.role || "ADMIN"}
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Joined</div>
+            <div className={`font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>
+              {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "N/A"}
+            </div>
+          </div>
+        </div>
+
+        <div className={`pt-5 border-t ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
+          <form onSubmit={handleChangeEmail} className="space-y-4">
+            <div>
+              <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Change Email</label>
+              <input
+                type="email" value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className={`w-full px-4 py-3 rounded-xl border text-sm outline-none transition-all ${
+                  darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"
+                }`}
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={savingEmail}
+              className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-50 transition-all cursor-pointer text-xs"
+            >
+              {savingEmail ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-zinc-950/30 border-t-zinc-950 rounded-full animate-spin" />
+                  Sending...
+                </span>
+              ) : "Update Email"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddSuperadminSection({ darkMode, showToast }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !password) { showToast("All fields are required.", "error"); return; }
+    if (password !== confirmPassword) { showToast("Passwords do not match.", "error"); return; }
+    if (password.length < 6) { showToast("Password must be at least 6 characters.", "error"); return; }
+    setCreating(true);
+    try {
+      const res = await fetch("/api/create-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, fullName: name, role: "ADMIN" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showToast(`Superadmin "${name}" created successfully!`, "success");
+      setName(""); setEmail(""); setPassword(""); setConfirmPassword("");
+    } catch (err) { showToast(err.message, "error"); }
+    finally { setCreating(false); }
+  };
+
+  return (
+    <div className={`relative overflow-hidden rounded-2xl border transition-all ${darkMode ? "bg-[#0F1626]/80 backdrop-blur-xl border-white/[0.06]" : "bg-white/80 backdrop-blur-xl border-black/5 shadow-sm"}`}>
+      <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none ${darkMode ? "bg-emerald-500/5" : "bg-emerald-500/3"}`} />
+      <div className="p-6 sm:p-8">
+        <div className={`relative flex items-center gap-3 mb-6 pb-5 border-b ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"}`}>
+            <UserPlusIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>Add Superadmin</h3>
+            <p className={`text-[10px] ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
+              Grant full admin access to another user
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleCreate} className="relative space-y-4">
+          <div>
+            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Full Name</label>
+            <input
+              type="text" value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={`w-full px-4 py-3 rounded-xl border text-sm outline-none transition-all ${
+                darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
+              }`}
+              placeholder="e.g. John Doe"
+              required
+            />
+          </div>
+          <div>
+            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Email Address</label>
+            <input
+              type="email" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={`w-full px-4 py-3 rounded-xl border text-sm outline-none transition-all ${
+                darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
+              }`}
+              placeholder="admin@example.com"
+              required
+            />
+          </div>
+          <div>
+            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"} value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={`w-full px-4 py-3 pr-11 rounded-xl border text-sm outline-none transition-all ${
+                  darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
+                }`}
+                placeholder="Min. 6 characters"
+                required minLength={6}
+              />
+              <button
+                type="button" onClick={() => setShowPassword(!showPassword)}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${
+                  darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"
+                }`} tabIndex={-1}
+              >
+                {showPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Confirm Password</label>
+            <div className="relative">
+              <input
+                type={showConfirm ? "text" : "password"} value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={`w-full px-4 py-3 pr-11 rounded-xl border text-sm outline-none transition-all ${
+                  darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
+                }`}
+                placeholder="Repeat password"
+                required minLength={6}
+              />
+              <button
+                type="button" onClick={() => setShowConfirm(!showConfirm)}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${
+                  darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"
+                }`} tabIndex={-1}
+              >
+                {showConfirm ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={creating}
+            className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-50 transition-all cursor-pointer text-xs"
+          >
+            {creating ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-zinc-950/30 border-t-zinc-950 rounded-full animate-spin" />
+                Creating...
+              </span>
+            ) : "Create Superadmin"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ChangePasswordSection({ darkMode, showToast }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) { showToast("New passwords do not match.", "error"); return; }
+    if (newPassword.length < 6) { showToast("Password must be at least 6 characters.", "error"); return; }
+    setSaving(true);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: (await supabase.auth.getSession()).data.session?.user?.email || "",
+        password: currentPassword,
+      });
+      if (signInError) { showToast("Current password is incorrect.", "error"); setSaving(false); return; }
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      showToast("Password updated successfully!", "success");
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+    } catch (err) { showToast(err.message, "error"); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className={`relative overflow-hidden rounded-2xl border transition-all ${darkMode ? "bg-[#0F1626]/80 backdrop-blur-xl border-white/[0.06]" : "bg-white/80 backdrop-blur-xl border-black/5 shadow-sm"}`}>
+      <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none ${darkMode ? "bg-emerald-500/5" : "bg-emerald-500/3"}`} />
+      <div className="p-6 sm:p-8">
+        <div className={`relative flex items-center gap-3 mb-6 pb-5 border-b ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${darkMode ? "bg-amber-500/10 text-amber-400" : "bg-amber-100 text-amber-600"}`}>
+            <LockIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>Change Password</h3>
+            <p className={`text-[10px] ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
+              Update your account password
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleChangePassword} className="relative space-y-4">
+          <div>
+            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Current Password</label>
+            <div className="relative">
+              <input
+                type={showCurrent ? "text" : "password"} value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className={`w-full px-4 py-3 pr-11 rounded-xl border text-sm outline-none transition-all ${
+                  darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
+                }`}
+                placeholder="Enter current password"
+                required
+              />
+              <button
+                type="button" onClick={() => setShowCurrent(!showCurrent)}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${
+                  darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"
+                }`} tabIndex={-1}
+              >
+                {showCurrent ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>New Password</label>
+            <div className="relative">
+              <input
+                type={showNew ? "text" : "password"} value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={`w-full px-4 py-3 pr-11 rounded-xl border text-sm outline-none transition-all ${
+                  darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
+                }`}
+                placeholder="Min. 6 characters"
+                required minLength={6}
+              />
+              <button
+                type="button" onClick={() => setShowNew(!showNew)}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${
+                  darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"
+                }`} tabIndex={-1}
+              >
+                {showNew ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Confirm New Password</label>
+            <div className="relative">
+              <input
+                type={showConfirm ? "text" : "password"} value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={`w-full px-4 py-3 pr-11 rounded-xl border text-sm outline-none transition-all ${
+                  darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
+                }`}
+                placeholder="Repeat new password"
+                required minLength={6}
+              />
+              <button
+                type="button" onClick={() => setShowConfirm(!showConfirm)}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${
+                  darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"
+                }`} tabIndex={-1}
+              >
+                {showConfirm ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-50 transition-all cursor-pointer text-xs"
+          >
+            {saving ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-zinc-950/30 border-t-zinc-950 rounded-full animate-spin" />
+                Updating...
+              </span>
+            ) : "Update Password"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

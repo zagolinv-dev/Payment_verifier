@@ -74,7 +74,7 @@ export default function DashboardLayout({ children, darkMode, setDarkMode }) {
 
           <div className="lg:hidden flex items-center gap-2.5">
             <img src="/logo.png" alt="T's Verify" className="w-7 h-7 object-contain" />
-            <span className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>T's Pay</span>
+            <span className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>T's Verify</span>
           </div>
 
           <div className="flex items-center gap-3 ml-auto">

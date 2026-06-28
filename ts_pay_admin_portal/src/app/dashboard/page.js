@@ -13,7 +13,7 @@ const COLORS = ["#10b981", "#f59e0b", "#ef4444"];
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState({
-    totalVolume: 0, platformRevenue: 0, totalTransactions: 0,
+    totalAmount: 0, platformRevenue: 0, totalTransactions: 0,
     pendingCount: 0, verifiedCount: 0, failedCount: 0, userCount: 0, merchantCount: 0,
   });
   const [weeklyData, setWeeklyData] = useState([]);
@@ -38,13 +38,13 @@ export default function DashboardPage() {
         supabase.from("profiles").select("*", { count: "exact", head: true }),
       ]);
       const txns = txResult.data || [];
-      const totalVolume = txns.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+      const totalAmount = txns.reduce((s, t) => s + (Number(t.amount) || 0), 0);
       const verifiedCount = txns.filter((t) => t.status === "VERIFIED").length;
       const failedCount = txns.filter((t) => t.status === "FAILED").length;
       const pendingCount = txns.filter((t) => t.status === "PENDING").length;
 
       setMetrics({
-        totalVolume, platformRevenue: totalVolume * 0.01,
+        totalAmount, platformRevenue: totalAmount * 0.01,
         totalTransactions: txns.length, pendingCount,
         verifiedCount, failedCount,
         userCount: profileResult.count || 0,
@@ -58,7 +58,7 @@ export default function DashboardPage() {
         const dayTxns = txns.filter((t) => t.created_at?.startsWith(dayStr));
         days.push({
           name: d.toLocaleDateString("en-US", { weekday: "short" }),
-          volume: dayTxns.reduce((s, t) => s + (Number(t.amount) || 0), 0),
+          total: dayTxns.reduce((s, t) => s + (Number(t.amount) || 0), 0),
           count: dayTxns.length,
         });
       }
@@ -117,7 +117,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-          <MetricCard darkMode={darkMode} title="Processed Volume" value={`${(metrics.totalVolume / 1000).toFixed(0)}K`} subtitle="ETB" icon={WalletIcon} />
+          <MetricCard darkMode={darkMode}           title="Processed Total" value={`${(metrics.totalAmount / 1000).toFixed(0)}K`} subtitle="ETB" icon={WalletIcon} />
           <MetricCard darkMode={darkMode} title="Platform Revenue" value={metrics.platformRevenue.toFixed(0)} subtitle="ETB (1% fee)" icon={RevenueIcon} />
           <MetricCard darkMode={darkMode} title="Transactions" value={metrics.totalTransactions} subtitle={`${metrics.verifiedCount} verified`} icon={ActivityIcon} />
           <MetricCard darkMode={darkMode} title="Pending" value={metrics.pendingCount} subtitle="awaiting review" icon={PendingIcon} />
@@ -129,16 +129,16 @@ export default function DashboardPage() {
           }`}>
             <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none ${darkMode ? "bg-emerald-500/5" : "bg-emerald-500/3"}`} />
             <h3 className={`relative text-xs font-bold uppercase tracking-wider mb-5 ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
-              7-Day Volume Trend
+              7-Day Total Trend
             </h3>
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={weeklyData}>
-                <defs><linearGradient id="volumeGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.25} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
+                <defs><linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.25} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#1E2D47" : "#E4E4E7"} />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: darkMode ? "#71717a" : "#a1a1aa" }} />
                 <YAxis tick={{ fontSize: 10, fill: darkMode ? "#71717a" : "#a1a1aa" }} />
                 <Tooltip contentStyle={{ backgroundColor: darkMode ? "#0F1626" : "#fff", border: `1px solid ${darkMode ? "#1E2D47" : "#E4E4E7"}`, borderRadius: 8, fontSize: 12 }} />
-                <Area type="monotone" dataKey="volume" stroke="#10b981" fill="url(#volumeGrad)" strokeWidth={2.5} />
+                <Area type="monotone" dataKey="total" stroke="#10b981" fill="url(#totalGrad)" strokeWidth={2.5} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

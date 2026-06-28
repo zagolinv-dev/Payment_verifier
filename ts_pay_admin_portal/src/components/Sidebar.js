@@ -28,7 +28,7 @@ export default function Sidebar({ darkMode, email, onLogout, mobileOpen, onClose
             <img src="/logo.png" alt="T's Verify" className="relative w-9 h-9 object-contain" />
           </div>
           <div>
-            <h2 className={`text-base font-bold tracking-tight leading-none ${darkMode ? "text-white" : "text-zinc-950"}`}>T's Pay</h2>
+            <h2 className={`text-base font-bold tracking-tight leading-none ${darkMode ? "text-white" : "text-zinc-950"}`}>T's Verify</h2>
             <span className="text-[8px] text-emerald-500 font-extrabold uppercase tracking-[0.15em] mt-0.5 block">Super Admin</span>
           </div>
         </Link>
@@ -101,11 +101,14 @@ export default function Sidebar({ darkMode, email, onLogout, mobileOpen, onClose
       </nav>
 
       <div className={`space-y-0.5 pt-4 border-t mt-4 ${darkMode ? "border-white/10" : "border-black/10"}`}>
+        <div className={`px-3.5 py-1.5 text-[9px] font-extrabold uppercase tracking-wider ${darkMode ? "text-zinc-600" : "text-zinc-400"}`}>
+          Legal
+        </div>
         <Link
-          href="/profile"
+          href="/terms"
           onClick={onClose}
           className={`group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 ${
-            pathname === "/profile"
+            pathname === "/terms"
               ? darkMode
                 ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/15"
                 : "text-emerald-600 bg-emerald-50 border border-emerald-200"
@@ -115,13 +118,35 @@ export default function Sidebar({ darkMode, email, onLogout, mobileOpen, onClose
           }`}
         >
           <span className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
-            pathname === "/profile"
+            pathname === "/terms"
               ? darkMode ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-100 text-emerald-600"
               : darkMode ? "bg-white/5 text-zinc-400" : "bg-black/5 text-zinc-500"
           }`}>
-            <UserIcon className="w-4 h-4" />
+            <DocumentIcon className="w-4 h-4" />
           </span>
-          My Profile
+          Terms of Service
+        </Link>
+        <Link
+          href="/privacy_policy"
+          onClick={onClose}
+          className={`group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 ${
+            pathname === "/privacy_policy"
+              ? darkMode
+                ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/15"
+                : "text-emerald-600 bg-emerald-50 border border-emerald-200"
+              : darkMode
+                ? "text-zinc-400 hover:text-zinc-200 hover:bg-white/5"
+                : "text-zinc-500 hover:text-zinc-800 hover:bg-black/5"
+          }`}
+        >
+          <span className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
+            pathname === "/privacy_policy"
+              ? darkMode ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-100 text-emerald-600"
+              : darkMode ? "bg-white/5 text-zinc-400" : "bg-black/5 text-zinc-500"
+          }`}>
+            <DocumentIcon className="w-4 h-4" />
+          </span>
+          Privacy Policy
         </Link>
         <button
           onClick={() => setShowConfirm(true)}
@@ -236,6 +261,14 @@ function LogoutIcon({ className }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+    </svg>
+  );
+}
+
+function DocumentIcon({ className }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
     </svg>
   );
 }

@@ -124,9 +124,20 @@ create table if not exists public.platform_settings (
   min_payout decimal(10, 2) default 5000.00,
   ocr_confidence decimal(4, 2) default 85.00,
   auto_verify boolean default true,
+  terms_content text default '',
+  privacy_content text default '',
   updated_at timestamptz default now() not null,
   updated_by uuid references public.profiles(id) on delete set null
 );
+
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'platform_settings' and column_name = 'terms_content') then
+    alter table public.platform_settings add column terms_content text default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'platform_settings' and column_name = 'privacy_content') then
+    alter table public.platform_settings add column privacy_content text default '';
+  end if;
+end $$;
 
 -- ── 2c. Audit Logs ────────────────────────────────────────────────────────────
 create table if not exists public.audit_logs (

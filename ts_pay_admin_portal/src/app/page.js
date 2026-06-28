@@ -142,7 +142,7 @@ export default function LoginPage() {
                   className="relative w-16 h-16 sm:w-20 sm:h-20 object-contain"
                 />
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight">T's Pay Admin</h2>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight">T's Verify Admin</h2>
               <p className={`text-xs mt-1.5 text-center ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
                 Sign in to manage your payment network
               </p>

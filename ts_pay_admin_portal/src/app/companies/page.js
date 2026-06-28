@@ -29,11 +29,11 @@ export default function CompaniesPage() {
     try {
       const { data: merchants } = await supabase.from("profiles").select("*").eq("role", "ADMIN");
       const { data: txData } = await supabase.from("transactions").select("verified_by, amount");
-      const volumeMap = {};
+      const totalMap = {};
       (txData || []).forEach((t) => {
-        if (t.verified_by) volumeMap[t.verified_by] = (volumeMap[t.verified_by] || 0) + (Number(t.amount) || 0);
+        if (t.verified_by) totalMap[t.verified_by] = (totalMap[t.verified_by] || 0) + (Number(t.amount) || 0);
       });
-      setCompanies((merchants || []).map((m) => ({ ...m, volume: volumeMap[m.id] || 0, status: "ACTIVE" })));
+      setCompanies((merchants || []).map((m) => ({ ...m, total: totalMap[m.id] || 0, status: "ACTIVE" })));
     } catch (err) { console.error("Failed to load companies:", err); }
     finally { setLoading(false); }
   };
@@ -133,7 +133,7 @@ export default function CompaniesPage() {
                 <tr className={`border-b text-zinc-400 font-bold uppercase tracking-wider ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
                   <th className="p-4 sm:p-5">Company</th>
                   <th className="p-4 sm:p-5">Email</th>
-                  <th className="p-4 sm:p-5">Volume</th>
+                  <th className="p-4 sm:p-5">Total</th>
                   <th className="p-4 sm:p-5">Status</th>
                   <th className="p-4 sm:p-5 text-right">Actions</th>
                 </tr>
@@ -161,7 +161,7 @@ export default function CompaniesPage() {
                     </td>
                     <td className="p-4 sm:p-5">{company.email}</td>
                     <td className={`p-4 sm:p-5 font-mono font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>
-                      {company.volume.toLocaleString()} ETB
+                      {company.total.toLocaleString()} ETB
                     </td>
                     <td className="p-4 sm:p-5">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${

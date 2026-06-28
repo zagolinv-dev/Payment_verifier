@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "T's Pay Super Admin Portal",
+  title: "T's Verify Super Admin Portal",
   description: "Super Admin controls for consolidated payment settlement networks.",
   icons: {
     icon: [
