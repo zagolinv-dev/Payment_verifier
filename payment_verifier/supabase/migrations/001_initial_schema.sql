@@ -152,6 +152,30 @@ CREATE POLICY "Users can delete own notifications"
   ON notifications FOR DELETE
   USING (auth.uid() = user_id);
 
+-- ── Trigger: notify admins on password reset request ─────────────────────
+CREATE OR REPLACE FUNCTION notify_admins_password_reset()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  INSERT INTO notifications (user_id, type, title, message)
+  SELECT
+    p.id,
+    'info',
+    'Password Reset Requested',
+    NEW.name || ' (' || NEW.email || ') requested a password reset.'
+  FROM profiles p
+  WHERE p.role = 'ADMIN';
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_password_reset_notify_admins
+  AFTER INSERT ON password_reset_requests
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_admins_password_reset();
+
 -- ── Storage Buckets ──────────────────────────────────────────────────────
 INSERT INTO storage.buckets (id, name, public) VALUES ('receipts', 'receipts', true)
 ON CONFLICT (id) DO NOTHING;

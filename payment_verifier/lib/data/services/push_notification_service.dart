@@ -29,7 +29,17 @@ class PushNotificationService {
       },
     );
 
+    await _requestPermission();
+
     _initialized = true;
+  }
+
+  Future<void> _requestPermission() async {
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android != null) {
+      await android.requestNotificationsPermission();
+    }
   }
 
   Future<void> showNotification({

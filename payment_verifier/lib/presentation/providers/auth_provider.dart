@@ -44,6 +44,16 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserProfileEntity?>> {
     state = const AsyncValue.loading();
     try {
       final user = await _repo.signIn(email: email, password: password);
+
+      if (role == 'Manager' && !user.isAdmin) {
+        await _repo.signOut();
+        throw Exception('This account is not a Manager. Please select "Waiter" or use a different account.');
+      }
+      if (role == 'Waiter' && user.isAdmin) {
+        await _repo.signOut();
+        throw Exception('This account is not a Waiter. Please select "Manager" or use a different account.');
+      }
+
       state = AsyncValue.data(user);
     } catch (e, st) {
       state = AsyncValue.error(e, st);

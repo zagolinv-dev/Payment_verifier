@@ -28,12 +28,7 @@ export default function CompaniesPage() {
   const loadData = async () => {
     try {
       const { data: merchants } = await supabase.from("profiles").select("*").eq("role", "ADMIN");
-      const { data: txData } = await supabase.from("transactions").select("verified_by, amount");
-      const totalMap = {};
-      (txData || []).forEach((t) => {
-        if (t.verified_by) totalMap[t.verified_by] = (totalMap[t.verified_by] || 0) + (Number(t.amount) || 0);
-      });
-      setCompanies((merchants || []).map((m) => ({ ...m, total: totalMap[m.id] || 0, status: "ACTIVE" })));
+      setCompanies((merchants || []).map((m) => ({ ...m, status: "ACTIVE" })));
     } catch (err) { console.error("Failed to load companies:", err); }
     finally { setLoading(false); }
   };
@@ -133,7 +128,6 @@ export default function CompaniesPage() {
                 <tr className={`border-b text-zinc-400 font-bold uppercase tracking-wider ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
                   <th className="p-4 sm:p-5">Company</th>
                   <th className="p-4 sm:p-5">Email</th>
-                  <th className="p-4 sm:p-5">Total</th>
                   <th className="p-4 sm:p-5">Status</th>
                   <th className="p-4 sm:p-5 text-right">Actions</th>
                 </tr>
@@ -141,7 +135,7 @@ export default function CompaniesPage() {
               <tbody className={`divide-y font-medium ${darkMode ? "divide-white/[0.04] text-zinc-300" : "divide-black/5 text-zinc-700"}`}>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
+                    <td colSpan={4} className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
                       No companies found matching your search.
                     </td>
                   </tr>
@@ -160,9 +154,6 @@ export default function CompaniesPage() {
                       </div>
                     </td>
                     <td className="p-4 sm:p-5">{company.email}</td>
-                    <td className={`p-4 sm:p-5 font-mono font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>
-                      {company.total.toLocaleString()} ETB
-                    </td>
                     <td className="p-4 sm:p-5">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
                         company.status === "ACTIVE"
