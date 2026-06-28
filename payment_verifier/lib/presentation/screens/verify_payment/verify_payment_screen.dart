@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -48,6 +49,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
   }
 
   Future<void> _processOcr(String imagePath) async {
+    if (!mounted) return;
     setState(() {
       _isOcrRunning = true;
       _ocrStatus = 'Running OCR...';
@@ -56,6 +58,8 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     try {
       final inputImage = InputImage.fromFilePath(imagePath);
       final result = await _ocrService.processImage(inputImage);
+
+      if (!mounted) return;
 
       if (result.hasAmount && _amountController.text.isEmpty) {
         _amountController.text = result.amount!;
@@ -91,7 +95,6 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
         );
       }
       if (resolvedCustomer != null && resolvedCustomer.isNotEmpty) {
-        // Store OCR-extracted name separately; only auto-fill buyer field if empty
         notifier.setOcrExtractedCustomerName(resolvedCustomer);
         if (_buyerController.text.isEmpty) {
           _buyerController.text = resolvedCustomer;
@@ -108,12 +111,14 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
         notifier.setTransactionDate(result.date!);
       }
 
+      if (!mounted) return;
       setState(() {
         _ocrStatus = 'OCR complete';
         _isOcrRunning = false;
       });
     } catch (e) {
       debugPrint('[OCR] failed: $e');
+      if (!mounted) return;
       setState(() {
         _ocrStatus = 'OCR failed: $e';
         _isOcrRunning = false;
@@ -184,16 +189,38 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     );
 
     if (source != null) {
-      final file = await picker.pickImage(source: source);
-      if (file != null && mounted) {
-        setState(() => _selectedImage = file);
-        ref.read(verifyProvider.notifier).setReceiptImage(file.path);
+      debugPrint('[PickImage] source selected: $source');
+      try {
+        final file = await picker.pickImage(source: source);
+        debugPrint('[PickImage] pickImage returned: ${file?.path}');
+        if (file != null && mounted) {
+        final dir = await getApplicationDocumentsDirectory();
+        debugPrint('[PickImage] persistent dir: ${dir.path}');
+        final localPath = '${dir.path}/receipt_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        debugPrint('[PickImage] copying ${file.path} -> $localPath');
+        await File(file.path).copy(localPath);
+        final exists = await File(localPath).exists();
+        debugPrint('[PickImage] local file exists: $exists, size: ${await File(localPath).length()}');
+        final localFile = XFile(localPath);
+        setState(() => _selectedImage = localFile);
+        debugPrint('[PickImage] state updated, path on XFile: ${_selectedImage?.path}');
+        ref.read(verifyProvider.notifier).setReceiptImage(localPath);
         final now = DateTime.now();
         final h = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
         final ampm = now.hour >= 12 ? 'PM' : 'AM';
         final dateStr = '${_monthAbbr(now.month)} ${now.day}, ${now.year} $h:${now.minute.toString().padLeft(2, '0')} $ampm';
         ref.read(verifyProvider.notifier).setTransactionDate(dateStr);
-        _processOcr(file.path);
+        _processOcr(localPath);
+      } else {
+        debugPrint('[PickImage] file was null or not mounted (mounted=$mounted)');
+      }
+      } catch (e, st) {
+        debugPrint('[PickImage] ERROR: $e\n$st');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not pick image: $e'), backgroundColor: AppTheme.error),
+          );
+        }
       }
     }
   }
@@ -740,8 +767,9 @@ class _ImageUploadZone extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         height: 180,
@@ -759,7 +787,26 @@ class _ImageUploadZone extends StatelessWidget {
             ? ClipRRect(
                 borderRadius: BorderRadius.circular(19),
                 child: Stack(fit: StackFit.expand, children: [
-                  Image.file(File(selectedImage!.path), fit: BoxFit.cover),
+                  Image.file(
+                    File(selectedImage!.path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      debugPrint('[ImageUploadZone] ERROR loading image: path=${selectedImage!.path}, error=$error');
+                      return Container(
+                        color: card,
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.broken_image_rounded, color: AppTheme.error, size: 32),
+                              const SizedBox(height: 6),
+                              Text('Failed to load image', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.error)),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   Positioned(
                     bottom: 8,
                     right: 8,

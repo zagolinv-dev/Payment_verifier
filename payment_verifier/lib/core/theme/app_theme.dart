@@ -8,11 +8,11 @@ class AppTheme {
   AppTheme._();
 
   // ── Color Tokens ──────────────────────────────────────────────────────────
-  static const Color bgDark = Color(0xFF0A1E12);
-  static const Color bgSurface = Color(0xFF0F2819);
-  static const Color bgCard = Color(0xFF142F1E);
-  static const Color bgCardElevated = Color(0xFF193824);
-  static const Color bgInput = Color(0xFF0C2014);
+  static const Color bgDark = Color(0xFF0F1626);
+  static const Color bgSurface = Color(0xFF131C2E);
+  static const Color bgCard = Color(0xFF151E33);
+  static const Color bgCardElevated = Color(0xFF1A2540);
+  static const Color bgInput = Color(0xFF0D1424);
 
   static const Color primaryGreen = Color(0xFF2DC98E);
   static const Color primaryGreenDim = Color(0xFF1A7A58);
@@ -30,13 +30,13 @@ class AppTheme {
   static const Color warning = Color(0xFFF4A923);
   static const Color pending = Color(0xFF4E9EFF);
 
-  static const Color textPrimary = Color(0xFFF0F6FC);
-  static const Color textSecondary = Color(0xFF8B98B1);
-  static const Color textTertiary = Color(0xFF4D5A70);
-  static const Color textOnPrimary = Color(0xFF0A1E12);
+  static const Color textPrimary = Color(0xFFF0F2F5);
+  static const Color textSecondary = Color(0xFFA1A1AA);
+  static const Color textTertiary = Color(0xFF71717A);
+  static const Color textOnPrimary = Color(0xFF0F1626);
 
-  static const Color borderSubtle = Color(0xFF1A4028);
-  static const Color borderMedium = Color(0xFF205034);
+  static const Color borderSubtle = Color(0xFF1E2A3D);
+  static const Color borderMedium = Color(0xFF2A3A55);
 
   // ── Gradients ─────────────────────────────────────────────────────────────
   static const LinearGradient primaryGradient = LinearGradient(
@@ -54,20 +54,20 @@ class AppTheme {
   static const LinearGradient bgGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFF0A1E12), Color(0xFF0F2819)],
+    colors: [Color(0xFF0F1626), Color(0xFF131C2E)],
   );
 
   static const LinearGradient splashGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF0C2416), Color(0xFF0F2A1C), Color(0xFF0A1E12)],
+    colors: [Color(0xFF0D1424), Color(0xFF131C2E), Color(0xFF0F1626)],
     stops: [0.0, 0.5, 1.0],
   );
 
   static const LinearGradient cardGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF193824), Color(0xFF0F2819)],
+    colors: [Color(0xFF1A2540), Color(0xFF151E33)],
   );
 
   // ── Card Decoration ───────────────────────────────────────────────────────

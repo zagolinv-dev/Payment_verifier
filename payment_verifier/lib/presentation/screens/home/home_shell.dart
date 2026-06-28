@@ -577,8 +577,8 @@ class _OvalNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final navBg = isDark ? const Color(0xFF0E1A12).withOpacity(0.97) : Colors.white.withOpacity(0.95);
-    final borderColor = isDark ? Colors.white.withOpacity(0.08) : AppTheme.lightBorderSubtle;
+    final navBg = isDark ? AppTheme.bgCard.withOpacity(0.95) : Colors.white.withOpacity(0.95);
+    final borderColor = isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle;
     final shadowColor = isDark ? Colors.black.withOpacity(0.5) : Colors.black.withOpacity(0.12);
     final bottomPad = MediaQuery.of(context).padding.bottom;
 
@@ -592,7 +592,7 @@ class _OvalNavBar extends StatelessWidget {
           border: Border.all(color: borderColor, width: 1),
           boxShadow: [
             BoxShadow(color: shadowColor, blurRadius: 30, offset: const Offset(0, 10)),
-            BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.08), blurRadius: 20, spreadRadius: -4, offset: const Offset(0, 4)),
+            if (!isDark) BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.08), blurRadius: 20, spreadRadius: -4, offset: const Offset(0, 4)),
           ],
         ),
         child: ClipRRect(

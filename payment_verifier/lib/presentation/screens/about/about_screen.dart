@@ -32,7 +32,7 @@ class AboutScreen extends ConsumerWidget {
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(context).padding.bottom + 90),
         children: [
           const SizedBox(height: 20),
 
@@ -45,14 +45,12 @@ class AboutScreen extends ConsumerWidget {
             ),
             child: Column(
               children: [
-                Container(
-                  width: 64, height: 64,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Center(
-                    child: Text('T', style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: Image.asset(
+                    'assets/images/T_s_verify_logo.png',
+                    width: 64, height: 64,
+                    fit: BoxFit.cover,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -184,7 +182,7 @@ class AboutScreen extends ConsumerWidget {
             ),
           ),
 
-          const SizedBox(height: 40),
+          const SizedBox(height: 20),
         ],
       ),
     );

@@ -135,6 +135,34 @@ class TransactionListItem extends StatelessWidget {
 
   void _showReceipt(BuildContext context) {
     if (transaction.receiptImage == null) return;
+    final path = transaction.receiptImage!;
+    debugPrint('[TransactionListItem] _showReceipt path: $path');
+    debugPrint('[TransactionListItem] file exists: ${File(path).existsSync()}');
+
+    final imageWidget = Image.file(
+      File(path),
+      fit: BoxFit.contain,
+      width: double.infinity,
+      height: 400,
+      errorBuilder: (_, error, __) {
+        debugPrint('[TransactionListItem] Image.file error: $error');
+        return Container(
+          height: 200,
+          color: AppTheme.bgCard,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.broken_image_rounded, color: AppTheme.textTertiary, size: 48),
+                const SizedBox(height: 8),
+                Text('Receipt image no longer available', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
     showBlurredDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -144,19 +172,7 @@ class TransactionListItem extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: Image.file(
-                File(transaction.receiptImage!),
-                fit: BoxFit.contain,
-                width: double.infinity,
-                height: 400,
-                errorBuilder: (_, __, ___) => Container(
-                  height: 200,
-                  color: AppTheme.bgCard,
-                  child: const Center(
-                    child: Icon(Icons.broken_image_rounded, color: AppTheme.textTertiary, size: 48),
-                  ),
-                ),
-              ),
+              child: imageWidget,
             ),
             const SizedBox(height: 16),
             GestureDetector(

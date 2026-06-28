@@ -142,7 +142,13 @@ class ManageUsersScreen extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _AddWaiterModal(),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _AddWaiterModal(scrollController: scrollController),
+      ),
     );
   }
 }
@@ -429,7 +435,9 @@ class _UserCard extends ConsumerWidget {
 // ── Add Waiter Modal ──────────────────────────────────────────────────────────
 
 class _AddWaiterModal extends ConsumerStatefulWidget {
-  const _AddWaiterModal();
+  const _AddWaiterModal({required this.scrollController});
+
+  final ScrollController scrollController;
 
   @override
   ConsumerState<_AddWaiterModal> createState() => _AddWaiterModalState();
@@ -507,6 +515,7 @@ class _AddWaiterModalState extends ConsumerState<_AddWaiterModal> {
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
+          controller: widget.scrollController,
           padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + bottom + MediaQuery.of(context).padding.bottom),
           child: Form(
             key: _formKey,
