@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:payment_verifier/data/datasources/supabase_bank_account_datasource.dart';
+import 'package:payment_verifier/data/datasources/supabase_notification_datasource.dart';
 import 'package:payment_verifier/data/repositories/bank_account_repository_impl.dart';
 import 'package:payment_verifier/domain/entities/bank_account_entity.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
@@ -21,8 +22,9 @@ final bankAccountsProvider =
 });
 
 class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
-  BankAccountNotifier(this._repo) : super(const AsyncValue.data(null));
+  BankAccountNotifier(this._repo, this._notifDatasource) : super(const AsyncValue.data(null));
   final BankAccountRepositoryImpl _repo;
+  final SupabaseNotificationDatasource _notifDatasource;
 
   Future<bool> createAccount({
     required String holderName,
@@ -50,7 +52,12 @@ class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> toggleActive(String id, bool isActive) async {
     try {
-      await _repo.toggleActive(id, isActive);
+      final account = await _repo.toggleActive(id, isActive);
+      await _notifDatasource.createNotification(
+        type: 'info',
+        title: isActive ? 'Bank Account Activated' : 'Bank Account Deactivated',
+        message: '${account.bankName} — ${account.holderName} is now ${isActive ? "active" : "inactive"}.',
+      );
       return true;
     } catch (_) {
       return false;
@@ -96,5 +103,8 @@ class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
 final bankAccountNotifierProvider =
     StateNotifierProvider.autoDispose<BankAccountNotifier, AsyncValue<void>>(
         (ref) {
-  return BankAccountNotifier(ref.watch(bankAccountRepositoryProvider));
+  return BankAccountNotifier(
+    ref.watch(bankAccountRepositoryProvider),
+    SupabaseNotificationDatasource(ref.watch(supabaseClientProvider)),
+  );
 });
