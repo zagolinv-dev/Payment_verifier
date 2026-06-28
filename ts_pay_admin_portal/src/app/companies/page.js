@@ -8,7 +8,7 @@ import DashboardLayout from "../dashboard-layout";
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState({ message: "", type: "info" });
 

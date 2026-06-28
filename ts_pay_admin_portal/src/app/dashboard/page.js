@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const [bankDistribution, setBankDistribution] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("adminDarkMode");
@@ -104,15 +104,6 @@ export default function DashboardPage() {
             <p className={`text-xs mt-1 ${darkMode ? "text-zinc-500" : "text-zinc-500"}`}>
               Real-time settlement overview
             </p>
-          </div>
-          <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold tracking-wider flex items-center gap-2 ${
-            darkMode ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-emerald-50 border-emerald-200 text-emerald-600"
-          }`}>
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 animate-ping opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            Live
           </div>
         </div>
 

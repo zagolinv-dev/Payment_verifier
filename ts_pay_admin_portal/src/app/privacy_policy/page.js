@@ -67,13 +67,16 @@ Email: privacy@tspay.com
 Address: Addis Ababa, Ethiopia`;
 
 export default function PrivacyPolicyPage() {
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [content, setContent] = useState(DEFAULT_PRIVACY);
 
   useEffect(() => {
     const stored = localStorage.getItem("adminDarkMode");
     if (stored !== null) setDarkMode(JSON.parse(stored));
+    const handler = (e) => setDarkMode(e.detail);
+    window.addEventListener("darkmodechange", handler);
     loadContent();
+    return () => window.removeEventListener("darkmodechange", handler);
   }, []);
 
   const loadContent = async () => {

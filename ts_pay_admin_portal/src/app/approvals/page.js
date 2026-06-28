@@ -8,7 +8,7 @@ import DashboardLayout from "../dashboard-layout";
 export default function ApprovalsPage() {
   const [merchants, setMerchants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [reviewing, setReviewing] = useState(null);
   const [selected, setSelected] = useState(null);
   const [approveEmail, setApproveEmail] = useState("");

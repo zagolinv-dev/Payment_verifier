@@ -6,7 +6,7 @@ import { CheckCircleIcon, XCircleIcon, EyeIcon, EyeOffIcon, UserIcon, UserPlusIc
 import DashboardLayout from "../dashboard-layout";
 
 export default function SettingsPage() {
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "info" });
   const [activeSection, setActiveSection] = useState("profile");
 

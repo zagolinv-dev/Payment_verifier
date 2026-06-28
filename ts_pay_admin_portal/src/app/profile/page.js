@@ -8,7 +8,7 @@ import DashboardLayout from "../dashboard-layout";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
