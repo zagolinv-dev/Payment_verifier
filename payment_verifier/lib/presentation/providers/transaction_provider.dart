@@ -91,6 +91,12 @@ final dashboardMetricsProvider =
   return repo.getDashboardMetrics();
 });
 
+final deleteTransactionProvider =
+    Provider.autoDispose<Future<void> Function(String)>((ref) {
+  final repo = ref.watch(transactionRepositoryProvider);
+  return (String id) => repo.deleteTransaction(id);
+});
+
 final weeklyTotalsProvider =
     FutureProvider.autoDispose<Map<String, double>>((ref) async {
   final repo = ref.watch(transactionRepositoryProvider);

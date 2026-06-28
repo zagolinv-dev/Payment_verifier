@@ -69,9 +69,12 @@ class SupabaseNotificationDatasource {
   }
 
   Future<void> deleteNotification(String id) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
     await _client
         .from(AppConstants.notificationsTable)
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', userId);
   }
 }

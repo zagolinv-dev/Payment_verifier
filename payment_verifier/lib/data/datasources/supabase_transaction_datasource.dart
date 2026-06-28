@@ -200,6 +200,13 @@ class SupabaseTransactionDatasource {
     });
   }
 
+  Future<void> deleteTransaction(String id) async {
+    await _client
+        .from(AppConstants.transactionsTable)
+        .delete()
+        .eq('id', id);
+  }
+
   Future<void> clearAllTransactions() async {
     // 1) Try the SECURITY DEFINER RPC first (bypasses RLS entirely).
     //    Requires this SQL run once in Supabase SQL Editor:

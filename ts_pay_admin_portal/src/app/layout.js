@@ -16,10 +16,10 @@ export const metadata = {
   description: "Super Admin controls for consolidated payment settlement networks.",
   icons: {
     icon: [
-      { url: "/logo.png", sizes: "32x32", type: "image/png" },
-      { url: "/logo.png", sizes: "16x16", type: "image/png" },
+      { url: "/logo.png?v=2", sizes: "32x32", type: "image/png" },
+      { url: "/logo.png?v=2", sizes: "16x16", type: "image/png" },
     ],
-    apple: "/logo.png",
+    apple: "/logo.png?v=2",
   },
 };
 

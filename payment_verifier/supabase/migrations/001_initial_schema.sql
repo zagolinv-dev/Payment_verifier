@@ -91,6 +91,12 @@ CREATE POLICY "Authenticated users can insert transactions"
   ON transactions FOR INSERT
   WITH CHECK (auth.role() = 'authenticated');
 
+CREATE POLICY "Admin can delete transactions"
+  ON transactions FOR DELETE
+  USING (EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN'
+  ));
+
 -- ── Bank Accounts ────────────────────────────────────────────────────────
 CREATE TABLE bank_accounts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -140,6 +146,10 @@ CREATE POLICY "Users can insert own notifications"
 
 CREATE POLICY "Users can update own notifications"
   ON notifications FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own notifications"
+  ON notifications FOR DELETE
   USING (auth.uid() = user_id);
 
 -- ── Storage Buckets ──────────────────────────────────────────────────────

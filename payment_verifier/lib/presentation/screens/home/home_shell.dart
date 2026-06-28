@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:payment_verifier/core/router/app_router.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
+import 'package:payment_verifier/data/services/push_notification_service.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/notification_provider.dart';
@@ -23,11 +24,40 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
+  void initState() {
+    super.initState();
+    PushNotificationService.instance.init();
+  }
+
+  @override
+  void dispose() {
+    PushNotificationService.instance.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
+    if (user != null) {
+      PushNotificationService.instance.subscribe(
+        ref.read(supabaseClientProvider),
+        user.id,
+      );
+    }
+
+    ref.listen(currentUserProvider, (prev, next) {
+      if (next != null) {
+        PushNotificationService.instance.subscribe(
+          ref.read(supabaseClientProvider),
+          next.id,
+        );
+      } else {
+        PushNotificationService.instance.dispose();
+      }
+    });
     final isAdmin = ref.watch(isAdminProvider);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
-    final user = ref.watch(currentUserProvider);
     final location = GoRouterState.of(context).matchedLocation;
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;

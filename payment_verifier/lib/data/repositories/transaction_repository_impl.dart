@@ -80,6 +80,10 @@ class TransactionRepositoryImpl implements TransactionRepository {
       _datasource.getWeeklyTotals();
 
   @override
+  Future<void> deleteTransaction(String id) =>
+      _datasource.deleteTransaction(id);
+
+  @override
   Future<void> clearAllTransactions() =>
       _datasource.clearAllTransactions();
 }

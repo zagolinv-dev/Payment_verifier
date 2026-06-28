@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/core/utils/pdf_export.dart';
+import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/user_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
@@ -100,6 +101,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final notifier = ref.read(transactionFiltersProvider.notifier);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
+    final isAdmin = ref.watch(isAdminProvider);
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
     final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
@@ -250,7 +252,46 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
                           itemCount: txs.length,
-                          itemBuilder: (ctx, i) => TransactionListItem(transaction: txs[i]),
+                          itemBuilder: (ctx, i) {
+                            final tx = txs[i];
+                            final tile = TransactionListItem(transaction: tx);
+                            if (!isAdmin) return tile;
+                            return Dismissible(
+                              key: ValueKey(tx.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.error.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 22),
+                              ),
+                              confirmDismiss: (_) async {
+                                return await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: card,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    title: Text('Delete transaction?', style: GoogleFonts.outfit(color: textPrimary)),
+                                    content: Text('Remove ${tx.referenceCode}?', style: GoogleFonts.inter(color: textSecondary)),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary))),
+                                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Delete', style: GoogleFonts.inter(color: AppTheme.error, fontWeight: FontWeight.w600))),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (_) async {
+                                try {
+                                  await ref.read(deleteTransactionProvider)(tx.id);
+                                  ref.invalidate(transactionsProvider);
+                                } catch (_) {}
+                              },
+                              child: tile,
+                            );
+                          },
                         ),
                   loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
                   error: (e, _) => Center(child: Text('Error: $e', style: GoogleFonts.inter(color: textSecondary))),
