@@ -29,6 +29,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
   final _buyerController = TextEditingController();
   final _amountController = TextEditingController();
   final _receiverAcctController = TextEditingController();
+  final _referenceController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _ocrService = OcrService();
   XFile? _selectedImage;
@@ -42,6 +43,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     _buyerController.dispose();
     _amountController.dispose();
     _receiverAcctController.dispose();
+    _referenceController.dispose();
     super.dispose();
   }
 
@@ -65,7 +67,9 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
       notifier.setOcrCompleted();
 
       if (result.hasReference) {
-        notifier.setCode(normalizeFTReference(result.reference!));
+        final ref = normalizeFTReference(result.reference!);
+        notifier.setCode(ref);
+        _referenceController.text = ref;
       }
 
       final bank = _mapPaymentMethodToBank(result.paymentMethod);
@@ -87,13 +91,16 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
         );
       }
       if (resolvedCustomer != null && resolvedCustomer.isNotEmpty) {
+        // Store OCR-extracted name separately; only auto-fill buyer field if empty
+        notifier.setOcrExtractedCustomerName(resolvedCustomer);
         if (_buyerController.text.isEmpty) {
           _buyerController.text = resolvedCustomer;
+          notifier.setBuyerName(resolvedCustomer);
         }
-        notifier.setBuyerName(resolvedCustomer);
       }
 
       if (result.receiverName != null && result.receiverName!.isNotEmpty) {
+        notifier.setOcrExtractedReceiverName(result.receiverName!);
         notifier.setReceiverName(result.receiverName!);
       }
 
@@ -202,14 +209,23 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     final businessAccounts = accounts.map((a) => a.accountNumber).toList();
     final txRepo = ref.read(transactionRepositoryProvider);
 
+    // Determine expected receiver name from the bank account holder that matches selectedBank
+    final selectedBankName = st.selectedBank;
+    String? expectedReceiverName;
+    if (selectedBankName != null) {
+      final matchingAccount = accounts.where((a) =>
+        a.bankName.toLowerCase() == selectedBankName.toLowerCase() && a.isActive).firstOrNull;
+      expectedReceiverName = matchingAccount?.holderName;
+    }
+
     final ocr = OcrResult(
       rawText: st.ocrRawText,
       amount: st.amount > 0 ? st.amount.toStringAsFixed(2) : null,
       reference: st.referenceCode.isNotEmpty ? st.referenceCode : null,
       paymentMethod: st.ocrDetectedBank,
-      customerName: st.buyerName.isNotEmpty ? st.buyerName : null,
+      customerName: st.ocrExtractedCustomerName.isNotEmpty ? st.ocrExtractedCustomerName : null,
       receiverAccount: st.receiverAccount.isNotEmpty ? st.receiverAccount : null,
-      receiverName: st.receiverName.isNotEmpty ? st.receiverName : null,
+      receiverName: st.ocrExtractedReceiverName.isNotEmpty ? st.ocrExtractedReceiverName : null,
       date: st.transactionDate.isNotEmpty ? st.transactionDate : null,
     );
 
@@ -221,6 +237,8 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
         attemptCount: st.attemptCount,
         maxAttempts: st.maxAttempts,
         ocrDetectedBank: st.ocrDetectedBank,
+        expectedCustomerName: st.buyerName.isNotEmpty ? st.buyerName : null,
+        expectedReceiverName: expectedReceiverName,
       ),
       isDuplicate: (code) async {
         try {
@@ -430,6 +448,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     _buyerController.clear();
     _amountController.clear();
     _receiverAcctController.clear();
+    _referenceController.clear();
     setState(() => _selectedImage = null);
   }
 
@@ -598,6 +617,17 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
                           : AppTheme.lightTextTertiary,
                       size: 20),
                   onChanged: notifier.setReceiverAccount,
+                ),
+                const SizedBox(height: 20),
+
+                AppTextField(
+                  label: 'Reference Code',
+                  hint: 'Transaction ID from receipt',
+                  controller: _referenceController,
+                  prefixIcon: Icon(Icons.tag_rounded,
+                      color: isDark ? AppTheme.textTertiary : AppTheme.lightTextTertiary,
+                      size: 20),
+                  onChanged: (v) => notifier.setCode(v),
                 ),
                 const SizedBox(height: 20),
 

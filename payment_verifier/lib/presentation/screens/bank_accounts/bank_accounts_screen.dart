@@ -94,6 +94,7 @@ class BankAccountsScreen extends ConsumerWidget {
                               await ref.read(bankAccountNotifierProvider.notifier).toggleActive(accounts[i].id, val);
                               ref.invalidate(bankAccountsProvider);
                             },
+                            onEdit: () => _showEditModal(context, ref, accounts[i]),
                             onDelete: () async {
                               await ref.read(bankAccountNotifierProvider.notifier).deleteAccount(accounts[i].id);
                               ref.invalidate(bankAccountsProvider);
@@ -132,6 +133,30 @@ class BankAccountsScreen extends ConsumerWidget {
       ),
     );
   }
+
+  void _showEditModal(BuildContext context, WidgetRef ref, BankAccountEntity account) {
+    showBlurredBottomSheet(
+      context: context,
+      builder: (_) => _AddBankAccountModal(
+        initial: account,
+        onSubmit: (data) async {
+          final success = await ref
+              .read(bankAccountNotifierProvider.notifier)
+              .updateAccount(
+                id: account.id,
+                holderName: data['holderName']!,
+                bankName: data['bankName']!,
+                accountNumber: data['accountNumber']!,
+                phone: data['phone'],
+                notes: data['notes'],
+              );
+          if (success) {
+            ref.invalidate(bankAccountsProvider);
+          }
+        },
+      ),
+    );
+  }
 }
 
 // ── Bank Account Card ─────────────────────────────────────────────────────────
@@ -140,6 +165,7 @@ class _BankAccountCard extends StatelessWidget {
   const _BankAccountCard({
     required this.account,
     required this.onToggle,
+    required this.onEdit,
     required this.onDelete,
     required this.isDark,
     required this.card,
@@ -151,6 +177,7 @@ class _BankAccountCard extends StatelessWidget {
 
   final BankAccountEntity account;
   final void Function(bool) onToggle;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
   final bool isDark;
   final Color card, borderColor, textPrimary, textSecondary, textTertiary;
@@ -255,6 +282,19 @@ class _BankAccountCard extends StatelessWidget {
               ),
               const Spacer(),
               GestureDetector(
+                onTap: onEdit,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.edit_outlined,
+                      color: AppTheme.primaryGreen, size: 18),
+                ),
+              ),
+              GestureDetector(
                 onTap: () => _confirmDelete(context),
                 child: Container(
                   padding: const EdgeInsets.all(8),
@@ -317,7 +357,8 @@ class _BankAccountCard extends StatelessWidget {
 // ── Add Bank Account Modal ────────────────────────────────────────────────────
 
 class _AddBankAccountModal extends StatefulWidget {
-  const _AddBankAccountModal({required this.onSubmit});
+  const _AddBankAccountModal({required this.onSubmit, this.initial});
+  final BankAccountEntity? initial;
   final Future<void> Function(Map<String, String?>) onSubmit;
 
   @override
@@ -326,12 +367,22 @@ class _AddBankAccountModal extends StatefulWidget {
 
 class _AddBankAccountModalState extends State<_AddBankAccountModal> {
   final _formKey = GlobalKey<FormState>();
-  final _holderController = TextEditingController();
-  final _accountController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _notesController = TextEditingController();
+  late final TextEditingController _holderController;
+  late final TextEditingController _accountController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _notesController;
   String? _selectedBank;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _holderController = TextEditingController(text: widget.initial?.holderName ?? '');
+    _accountController = TextEditingController(text: widget.initial?.accountNumber ?? '');
+    _phoneController = TextEditingController(text: widget.initial?.phone ?? '');
+    _notesController = TextEditingController(text: widget.initial?.notes ?? '');
+    _selectedBank = widget.initial?.bankName;
+  }
 
   @override
   void dispose() {
@@ -396,7 +447,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Add Bank Account',
+                widget.initial != null ? 'Edit Bank Account' : 'Add Bank Account',
                 style: GoogleFonts.outfit(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
@@ -477,8 +528,8 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
               ),
               const SizedBox(height: 28),
               GradientButton(
-                label: 'Add Account',
-                icon: Icons.add_rounded,
+                label: widget.initial != null ? 'Save Changes' : 'Add Account',
+                icon: widget.initial != null ? Icons.save_rounded : Icons.add_rounded,
                 isLoading: _isLoading,
                 onPressed: _isLoading ? null : _submit,
               ),

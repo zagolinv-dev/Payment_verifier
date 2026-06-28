@@ -114,13 +114,17 @@ class SupabaseTransactionDatasource {
 
     final allResponse = await _client
         .from(AppConstants.transactionsTable)
-        .select('amount, tip');
+        .select('amount, tip, status');
     final allTxs = (allResponse as List).cast<Map<String, dynamic>>();
 
     double totalIncome = 0, totalTips = 0;
+    int totalVerified = 0, totalFailed = 0;
     for (final t in allTxs) {
       totalIncome += (t['amount'] as num).toDouble();
       totalTips += (t['tip'] as num).toDouble();
+      final status = t['status'] as String;
+      if (status == 'VERIFIED') totalVerified++;
+      if (status == 'FAILED' || status == 'FRAUD_SUSPECTED') totalFailed++;
     }
 
     int verifiedToday = 0, failedToday = 0;
@@ -141,6 +145,8 @@ class SupabaseTransactionDatasource {
       failedToday: failedToday,
       todayTotal: todayTotal,
       todayCount: todayTxs.length,
+      totalVerified: totalVerified,
+      totalFailed: totalFailed,
     );
   }
 

@@ -119,6 +119,8 @@ class VerifyState {
     this.maxAttempts = 3,
     this.verifyResult,
     this.dateElapsed = '',
+    this.ocrExtractedCustomerName = '',
+    this.ocrExtractedReceiverName = '',
   });
 
   final String? selectedBank;
@@ -141,6 +143,8 @@ class VerifyState {
   final int maxAttempts;
   final VerifyResult? verifyResult;
   final String dateElapsed;
+  final String ocrExtractedCustomerName;
+  final String ocrExtractedReceiverName;
 
   bool get canVerify =>
       selectedBank != null &&
@@ -172,6 +176,8 @@ class VerifyState {
     int? maxAttempts,
     VerifyResult? verifyResult,
     String? dateElapsed,
+    String? ocrExtractedCustomerName,
+    String? ocrExtractedReceiverName,
     bool clearResult = false,
     bool clearError = false,
   }) {
@@ -196,6 +202,8 @@ class VerifyState {
       maxAttempts: maxAttempts ?? this.maxAttempts,
       verifyResult: verifyResult ?? this.verifyResult,
       dateElapsed: dateElapsed ?? this.dateElapsed,
+      ocrExtractedCustomerName: ocrExtractedCustomerName ?? this.ocrExtractedCustomerName,
+      ocrExtractedReceiverName: ocrExtractedReceiverName ?? this.ocrExtractedReceiverName,
     );
   }
 }
@@ -289,6 +297,8 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
   void setReceiverName(String name) => state = state.copyWith(receiverName: name);
   void setReceiverAccount(String acct) => state = state.copyWith(receiverAccount: acct);
   void setTransactionDate(String date) => state = state.copyWith(transactionDate: date);
+  void setOcrExtractedCustomerName(String name) => state = state.copyWith(ocrExtractedCustomerName: name);
+  void setOcrExtractedReceiverName(String name) => state = state.copyWith(ocrExtractedReceiverName: name);
   void setOrderTotal(double val) {
     final t = state.amount > val ? state.amount - val : 0.0;
     state = state.copyWith(orderTotal: val, tip: t);

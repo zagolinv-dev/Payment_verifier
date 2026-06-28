@@ -65,34 +65,49 @@ class OcrService {
   }
 
   OcrResult parseText(String text, {Map<String, String> geom = const {}}) {
+    final bank = _paymentMethod(text);
     return OcrResult(
       rawText: text,
       amount: _amount(text, geom),
       reference: extractReference(text, geom: geom),
-      paymentMethod: _paymentMethod(text),
+      paymentMethod: bank,
       bankName: _bankName(text),
       status: _status(text),
       customerName: _firstNonEmpty([
         _cleanName(geom['Sender Name']),
         _cleanName(geom['Source Account Name']),
+        _cleanName(geom['Sender Account Name']),
         _cleanName(geom['Customer Name']),
-        extractCustomerName(text, geom: geom),
+        _cleanName(geom['Payer Name']),
+        _cleanName(geom['Payer']),
+        extractCustomerName(text, geom: geom, bank: bank),
       ]),
       senderAccount: _firstNonEmpty([
         geom['Sender Account'],
         geom['Source Account'],
+        geom['Payer Account'],
+        geom['Debit Account'],
+        geom['From Account'],
         _cbeSenderAccount(text),
         _inlineAccount(text, _senderLabels),
       ]),
       receiverName: _firstNonEmpty([
-        geom['Receiver Name'],
-        geom['Transaction To'],
-        geom['Beneficiary'],
+        _cleanName(geom['Receiver Name']),
+        _cleanName(geom['Beneficiary Name']),
+        _cleanName(geom['Transfer To Name']),
+        _cleanName(geom['Transaction To']),
+        _cleanName(geom['Beneficiary']),
+        _cleanName(geom['Merchant Name']),
         _cbeReceiverName(text),
+        _telebirrReceiverName(text),
         _inlineReceiverName(text),
       ]),
       receiverAccount: _firstNonEmpty([
         geom['Receiver Account'],
+        geom['Beneficiary Account'],
+        geom['Credit Account'],
+        geom['To Account'],
+        geom['Transfer To Account'],
         _cbeReceiverAccount(text),
         _inlineAccount(text, _receiverLabels),
       ]),
@@ -104,12 +119,47 @@ class OcrService {
 
   // --- geometry pairing for two-column tables (BOA, Awash) -------------------
   static const List<String> _tableLabels = [
-    'Amount', 'Receiver Account', 'Receiver Name', 'Source Account',
-    'Source Account Name', 'Sender Account', 'Sender Name', 'Customer Name',
-    'Payer', 'Transaction Date',
-    'Transaction Time', 'Transaction Reference', 'Transaction ID',
-    'Transaction Number', 'Transaction To', 'Transaction Type', 'Beneficiary',
-    'Reason', 'Note',
+    // Payer / Sender fields
+    'Source Account Name',
+    'Source Account',
+    'Sender Account Name',
+    'Sender Account',
+    'Sender Name',
+    'Payer Name',
+    'Payer Account',
+    'Payer',
+    'Debit Account',
+    'From Account',
+    'Customer Name',
+    'From Your Account',
+
+    // Receiver / Beneficiary fields
+    'Receiver Account',
+    'Receiver Name',
+    'Beneficiary Account',
+    'Beneficiary Name',
+    'Beneficiary',
+    'Credit Account',
+    'To Account',
+    'Transfer To Account',
+    'Transfer To Name',
+    'Transfer To',
+    'Transaction To',
+    'Credited To Name',
+    'Credited To Account',
+    'Credited To',
+    'Merchant Name',
+
+    // Transaction Details
+    'Amount',
+    'Transaction Date',
+    'Transaction Time',
+    'Transaction Reference',
+    'Transaction ID',
+    'Transaction Number',
+    'Transaction Type',
+    'Reason',
+    'Note',
   ];
 
   Map<String, String> _extractByGeometry(RecognizedText rt) {
@@ -120,13 +170,16 @@ class OcrService {
       }
     }
     final fields = <String, String>{};
+    final matchedLines = <_Line>{};
     for (final label in _tableLabels) {
       final lc = label.toLowerCase();
       _Line? labelLine;
       for (final l in lines) {
+        if (matchedLines.contains(l)) continue;
         final t = l.text.toLowerCase().replaceAll(':', '').trim();
         if (t == lc || t.startsWith(lc)) {
           labelLine = l;
+          matchedLines.add(l);
           break;
         }
       }
@@ -162,7 +215,9 @@ class OcrService {
       }
       final sameLine = labelLine.text.replaceFirst(RegExp(lc, caseSensitive: false), '').trim();
       if (sameLine.isNotEmpty) {
-        var value = sameLine.replaceAll(RegExp(r'^[:,\-]+\s*'), '').trim();
+        var value = sameLine;
+        value = value.replaceFirst(RegExp(r'^(?:name|account|no|number|num|#)\b\s*[:\-]?\s*', caseSensitive: false), '').trim();
+        value = value.replaceAll(RegExp(r'^[:,\-\s]+'), '').trim();
         if (labelLine.rect != null) {
           final lr = labelLine.rect!;
           final idx = lines.indexOf(labelLine);
@@ -224,7 +279,7 @@ class OcrService {
       for (final m in re.allMatches(line)) {
         final raw = (m.group(1) ?? m.group(2))?.replaceAll(',', '');
         final val = double.tryParse(raw ?? '');
-        if (val != null && val > 0 && (best == null || val > best!)) best = val;
+        if (val != null && val > 0 && (best == null || val > best)) best = val;
       }
     }
     return best?.toStringAsFixed(2);
@@ -234,24 +289,64 @@ class OcrService {
   String? _cbeReceiverName(String text) {
     final m = RegExp(r'\bfor\s+([A-Za-z][A-Za-z .]{2,40}?)\s+ETB-?\d', caseSensitive: false)
         .firstMatch(text);
-    return _cleanName(m?.group(1));
+    if (m != null) return _cleanName(m.group(1));
+
+    final m2 = RegExp(
+      r'(?:beneficiary\s+name|receiver\s+name|transfer\s+to\s+name|credited\s+to\s+name|to\s+name)\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,40}?)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    return _cleanName(m2?.group(1));
   }
 
   String? _cbeReceiverAccount(String text) {
     final m = RegExp(r'\bfor\s+[A-Za-z .]+?\s+ETB-?(\d{3,})', caseSensitive: false)
         .firstMatch(text);
-    return m?.group(1);
+    if (m != null) return m.group(1);
+
+    final m2 = RegExp(
+      r'(?:beneficiary\s+account|receiver\s+account|credit\s+account|to\s+account|transfer\s+to\s+account)\s*[:\-]?\s*([0-9*xX\u2022\u25CF\u25AA]{6,})',
+      caseSensitive: false,
+    ).firstMatch(text);
+    return m2?.group(1)?.replaceAll(RegExp(r'\s+'), '');
   }
 
   String? _cbeSenderAccount(String text) {
     final m = RegExp(r'debited\s+from\s+[A-Za-z .]+?\s+ETB-?(\d{3,})', caseSensitive: false)
         .firstMatch(text);
-    return m?.group(1);
+    if (m != null) return m.group(1);
+
+    final m2 = RegExp(
+      r'(?:from\s+your\s+account|from\s+account|debit\s+account|payer\s+account|sender\s+account)\s*[:\-]?\s*([0-9*xX\u2022\u25CF\u25AA]{6,})',
+      caseSensitive: false,
+    ).firstMatch(text);
+    return m2?.group(1)?.replaceAll(RegExp(r'\s+'), '');
+  }
+
+  String? _telebirrReceiverName(String text) {
+    final m1 = RegExp(r'\bto\s+([A-Za-z0-9][A-Za-z0-9 .]{2,40}?)\s*(?:\([^)]*\))?\s+successful', caseSensitive: false)
+        .firstMatch(text);
+    if (m1 != null) return _cleanName(m1.group(1));
+
+    final m2 = RegExp(r'\btransfer\s+to\s+([A-Za-z0-9][A-Za-z0-9 .]{2,40}?)\b', caseSensitive: false)
+        .firstMatch(text);
+    if (m2 != null) return _cleanName(m2.group(1));
+
+    final m3 = RegExp(r'\btransaction\s+to\s+([A-Za-z0-9][A-Za-z0-9 .]{2,40}?)\b', caseSensitive: false)
+        .firstMatch(text);
+    if (m3 != null) return _cleanName(m3.group(1));
+
+    return null;
   }
 
   // --- accounts (label-based) -------------------------------------------------
-  static const _receiverLabels = ['account number', 'credited to', 'to account', 'receiver account'];
-  static const _senderLabels = ['from your account', 'from account', 'debited from', 'sender account', 'source account'];
+  static const _receiverLabels = [
+    'receiver account', 'beneficiary account', 'beneficiary account number',
+    'credit account', 'to account', 'credited to', 'account number', 'receiver account number'
+  ];
+  static const _senderLabels = [
+    'from your account', 'from account', 'debited from', 'sender account', 'source account',
+    'debit account', 'payer account', 'sender account number', 'source account number'
+  ];
 
   String? _inlineAccount(String text, List<String> labels) {
     final lbl = labels.map((l) => l.split(' ').map(RegExp.escape).join(r'\s+')).join('|');
@@ -419,75 +514,78 @@ String? extractReference(String text, {Map<String, String> geom = const {}}) {
   bool valid(String s) =>
       RegExp(r'^(?=[A-Z0-9]*\d)[A-Z0-9]{6,}$', caseSensitive: false).hasMatch(s.trim());
 
-  for (final k in ['Transaction Reference', 'Transaction ID', 'Transaction Number']) {
+  // 1) Geometry table lookup
+  for (final k in ['Transaction Reference', 'Transaction ID', 'Transaction Number',
+                   'Receipt No', 'Receipt Number', 'Voucher No', 'Voucher Number', 'Ref No']) {
     final v = geom[k]?.trim();
     if (v != null) {
       final tok = RegExp(r'(?=[A-Z0-9]*\d)[A-Z0-9]{6,}', caseSensitive: false).firstMatch(v)?.group(0);
       if (tok != null && valid(tok)) return normalizeFTReference(tok);
     }
   }
+
+  // 2) Label same-line: "Transaction ID: 12345" etc
   final labelled = RegExp(
-    r'(?:Transaction\s*(?:ID|Reference|Number)|Reference|Ref)\s*[:\-#]?\s*((?=[A-Z0-9]*\d)[A-Z0-9]{6,})',
+    r'(?:Transaction\s*(?:ID|Reference|Number|No|Code)|Receipt\s*(?:No|Number|Code|ID)|'
+    r'Voucher\s*(?:No|Number)|Ref\s*(?:No|Number|Code|ID)|Reference)\s*[:\-#]?\s*'
+    r'((?=[A-Z0-9]*\d)[A-Z0-9]{6,})',
     caseSensitive: false,
   ).firstMatch(text);
   if (labelled != null) return normalizeFTReference(labelled.group(1)!);
 
+  // 3) Label on one line, value on next line
+  final lines = text.split('\n');
+  final labelRe = RegExp(
+    r'^(?:Transaction\s*(?:ID|Reference|Number|No|Code)|Receipt\s*(?:No|Number|Code|ID)|'
+    r'Voucher\s*(?:No|Number)|Ref\s*(?:No|Number|Code|ID)|Reference)\s*:?\s*$',
+    caseSensitive: false,
+  );
+  for (int i = 0; i < lines.length - 1; i++) {
+    if (labelRe.hasMatch(lines[i].trim())) {
+      final val = lines[i + 1].trim();
+      final tok = RegExp(r'(?=[A-Z0-9]*\d)[A-Z0-9]{6,}', caseSensitive: false).firstMatch(val)?.group(0);
+      if (tok != null && valid(tok)) return normalizeFTReference(tok);
+    }
+  }
+
+  // 4) FT-prefixed codes
   final ft = RegExp(r'\bFT[A-Z0-9]{6,}\b', caseSensitive: false).firstMatch(text);
   if (ft != null) return normalizeFTReference(ft.group(0)!);
 
-  final digits = RegExp(r'\b\d{12,18}\b').firstMatch(text);
+  // 5) Pure digits 8+ chars (Ethiopian refs are often 10-14 digits)
+  final digits = RegExp(r'\b\d{8,20}\b').firstMatch(text);
   if (digits != null) return digits.group(0);
 
-  final generic = RegExp(r'\b(?=[A-Z0-9]*\d)[A-Z0-9]{8,18}\b', caseSensitive: false).firstMatch(text);
-  return generic != null ? normalizeFTReference(generic.group(0)!) : null;
+  // 6) Fallback: generic alphanumeric 8+ chars containing at least one digit
+  final generic = RegExp(r'\b(?=[A-Z0-9]*\d)[A-Z0-9]{8,20}\b', caseSensitive: false).firstMatch(text);
+  if (generic != null) return normalizeFTReference(generic.group(0)!);
+
+  // 7) Desperate fallback: any consecutive digits 6+ chars
+  final anyDigits = RegExp(r'\b\d{6,}\b').firstMatch(text);
+  return anyDigits?.group(0);
 }
 
-/// Customer/sender name across CBE (both formats), BOA, Awash, Telebirr.
-String? extractCustomerName(String text, {Map<String, String> geom = const {}}) {
+/// Customer/sender name across CBE, BOA, Awash, Telebirr, and other banks.
+/// Pass [bank] (e.g. 'cbe', 'boa', 'telebirr') for bank-specific extraction logic.
+String? extractCustomerName(String text,
+    {Map<String, String> geom = const {}, String? bank}) {
   bool looksLikeName(String s) {
     final n = s.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (n.length < 3 || n.length > 40) return false;
     if (RegExp(r'[\d:]').hasMatch(n)) return false;
-    if (RegExp(r'\b(?:ETB|Birr|Amount|Debited|Total|Charge|VAT|Account|Transaction|Bank)\b',
+    if (RegExp(r'\b(?:ETB|Birr|Amount|Debited|Total|Charge|VAT|Account|Transaction|Bank|Status)\b',
             caseSensitive: false)
         .hasMatch(n)) return false;
     if (n.split(' ').length > 4) return false;
     return true;
   }
 
-  for (final k in ['Sender Name', 'Source Account Name']) {
-    final v = geom[k];
-    if (v != null && looksLikeName(v)) return v.replaceAll(RegExp(r'\s+'), ' ').trim().toUpperCase();
-  }
-  // CBE new format: "debited from NAME ETB-####"
-  final dbt = RegExp(r'debited\s+from\s+([A-Za-z][A-Za-z .]{2,40}?)\s+ETB', caseSensitive: false)
-      .firstMatch(text);
-  if (dbt != null && looksLikeName(dbt.group(1)!)) {
-    return dbt.group(1)!.replaceAll(RegExp(r'\s+'), ' ').trim().toUpperCase();
-  }
-  // CBE old format: "account <masked> NAME for/to"
-  final acc = RegExp(
-    r'account\b\s+[\d*xX.\u2022\u25CF\u25AA/]+\s+([A-Za-z][A-Za-z. ]{2,40}?)\s+(?:for|to)\b',
-    caseSensitive: false,
-  ).firstMatch(text);
-  if (acc != null && looksLikeName(acc.group(1)!)) {
-    return acc.group(1)!.replaceAll(RegExp(r'\s+'), ' ').trim().toUpperCase();
-  }
-  // Label same-line (non-greedy to avoid swallowing subsequent labels)
-  final lbl = RegExp(
-    r'(?:Sender\s*Name|Source\s*Account\s*Name|Customer\s*Name|Payer)\s*[:\-]?\s*'
-    r'([A-Za-z][A-Za-z .]{2,60}?)'
-    r'(?=\s+(?:Receiver|Amount|Transaction|Sender|Source|Customer|Payer|Reason|Note|\d)|\s*$)',
-    caseSensitive: false,
-  ).firstMatch(text);
-
   String? tryName(String? raw) {
     if (raw == null) return null;
     final n = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (looksLikeName(n)) return n.toUpperCase();
-    // Strip trailing words that might be subsequent labels
     final cleaned = n.replaceAll(
-      RegExp(r'\s+(?:Account|Bank|Name|Number|Ref|Reference|ID|Date|Time|Type|Note)\s*\S*$',
+      RegExp(r'\s+(?:Account|Bank|Name|Number|Ref|Reference|ID|Date|Time|Type|Note|Status)\s*\S*$',
           caseSensitive: false),
       '',
     ).trim();
@@ -495,19 +593,133 @@ String? extractCustomerName(String text, {Map<String, String> geom = const {}}) 
     return null;
   }
 
-  final l = tryName(lbl?.group(1));
-  if (l != null) return l;
-  // Label/value on separate lines (table receipts)
+  // ── CBE: "From Your Account" + masked account number + name ────────────
+  if (bank == 'cbe') {
+    final lines = text.split('\n');
+    for (int i = 0; i < lines.length; i++) {
+      final lineLower = lines[i].toLowerCase();
+      if (lineLower.contains('from your account') || lineLower.contains('from account')) {
+        for (int j = i; j < lines.length && j <= i + 4; j++) {
+          final accountMatch = RegExp(r'[\d*xX*\u2022\u25CF\u25AA/]{4,}').firstMatch(lines[j]);
+          if (accountMatch != null) {
+            final sameLineRest = lines[j].substring(accountMatch.end).trim();
+            final nameOnSameLine = tryName(sameLineRest);
+            if (nameOnSameLine != null) return nameOnSameLine;
+
+            for (int k = j + 1; k < lines.length && k <= j + 3; k++) {
+              final name = tryName(lines[k]);
+              if (name != null) return name;
+            }
+          }
+        }
+      }
+    }
+    // Also try same-line: "From Your Account 1*******2693 NAME"
+    final sameLine = RegExp(
+      r'from\s+(?:your\s+)?account\s*[:\-]?\s*[\d*xX*\u2022\u25CF\u25AA/]+\s+([A-Za-z][A-Za-z .]{2,40}?)(?:\s|$)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (sameLine != null) {
+      final name = tryName(sameLine.group(1));
+      if (name != null) return name;
+    }
+    // Fallback to existing CBE patterns
+    final dbt = RegExp(r'debited\s+from\s+([A-Za-z][A-Za-z .]{2,40}?)\s+ETB',
+        caseSensitive: false).firstMatch(text);
+    if (dbt != null) {
+      final name = tryName(dbt.group(1));
+      if (name != null) return name;
+    }
+    final acc = RegExp(
+      r'account\b\s+[\d*xX.\u2022\u25CF\u25AA/]+\s+([A-Za-z][A-Za-z. ]{2,40}?)\s+(?:for|to)\b',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (acc != null) {
+      final name = tryName(acc.group(1));
+      if (name != null) return name;
+    }
+  }
+
+  // ── Telebirr: no customer name ─────────────────────────────────────────
+  if (bank == 'telebirr') return null;
+
+  // ── Awash: text patterns ────────────────────────────
+  if (bank == 'awash') {
+    final lines = text.split('\n');
+    for (int i = 0; i < lines.length - 1; i++) {
+      if (RegExp(r'^(?:sender\s*name|payer\s*name|source\s*account\s*name|debit\s*account\s*name)\s*:?\s*$', caseSensitive: false)
+          .hasMatch(lines[i].trim())) {
+        final name = tryName(lines[i + 1]);
+        if (name != null) return name;
+      }
+    }
+    final sameLine = RegExp(
+      r'(?:Sender\s*Name|Payer\s*Name|Source\s*Account\s*Name|Debit\s*Account\s*Name)\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,60}?)'
+      r'(?=\s+(?:Receiver|Amount|Transaction|Sender|Source|Customer|Payer|Reason|Note|\d)|\s*$)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (sameLine != null) {
+      final name = tryName(sameLine.group(1));
+      if (name != null) return name;
+    }
+  }
+
+  // ── BOA / Others: geometry + text patterns ────────────────────────────
+  for (final k in ['Sender Name', 'Source Account Name', 'Customer Name']) {
+    final v = geom[k];
+    if (v != null && tryName(v) != null) {
+      return v.replaceAll(RegExp(r'\s+'), ' ').trim().toUpperCase();
+    }
+  }
+
+  // BOA-specific text fallback when geometry fails
+  if (bank == 'boa') {
+    final lines = text.split('\n');
+    for (int i = 0; i < lines.length - 1; i++) {
+      if (RegExp(r'^source\s+account\s+name\s*:?\s*$', caseSensitive: false)
+          .hasMatch(lines[i].trim())) {
+        final name = tryName(lines[i + 1]);
+        if (name != null) return name;
+      }
+    }
+    final sameLine = RegExp(
+      r'Source\s+Account\s+Name\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,60}?)'
+      r'(?=\s+(?:Receiver|Amount|Transaction|Sender|Source|Customer|Payer|Reason|Note|\d)|\s*$)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (sameLine != null) {
+      final name = tryName(sameLine.group(1));
+      if (name != null) return name;
+    }
+    return null;
+  }
+
+  // ── Generic fallback (Awash, Dashen, etc.) ────────────────────────────
+  final lbl = RegExp(
+    r'(?:Sender\s*Name|Source\s*Account\s*Name|Customer\s*Name|Customer\s*[:\-]|Payer\s*[:\-]|'
+    r'Paid\s*(?:By|From)\s*[:\-]|From\s*[:\-]|Sent\s*To\s*[:\-]|To\s*[:\-])\s*'
+    r'([A-Za-z][A-Za-z .]{2,60}?)'
+    r'(?=\s+(?:Receiver|Amount|Transaction|Sender|Source|Customer|Payer|Reason|Note|\d)|\s*$)',
+    caseSensitive: false,
+  ).firstMatch(text);
+  if (lbl != null) {
+    final name = tryName(lbl.group(1));
+    if (name != null) return name;
+  }
+
   final lines = text.split('\n');
   final labelRe = RegExp(
-    r'^(?:Sender\s*Name|Source\s*Account\s*Name|Customer\s*Name|Payer)\s*:?\s*$',
+    r'^(?:Sender\s*Name|Source\s*Account\s*Name|Customer\s*(?:Name)?|Payer|'
+    r'Paid\s*(?:By|From)|From|Sent\s*To|To)\s*:?\s*$',
     caseSensitive: false,
   );
   for (int i = 0; i < lines.length - 1; i++) {
-    if (labelRe.hasMatch(lines[i].trim()) && looksLikeName(lines[i + 1].trim())) {
-      return lines[i + 1].trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
+    if (labelRe.hasMatch(lines[i].trim())) {
+      final name = tryName(lines[i + 1]);
+      if (name != null) return name;
     }
   }
+
   return null;
 }
 

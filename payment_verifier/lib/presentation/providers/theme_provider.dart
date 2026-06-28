@@ -10,9 +10,9 @@ const _kThemeKey = 'ts_pay_theme_mode';
 class ThemeNotifier extends Notifier<ThemeMode> {
   @override
   ThemeMode build() {
-    // Default: dark mode; async load will update state
+    // Default: light mode; async load will update state
     _loadSaved();
-    return ThemeMode.dark;
+    return ThemeMode.light;
   }
 
   Future<void> _loadSaved() async {
@@ -21,7 +21,7 @@ class ThemeNotifier extends Notifier<ThemeMode> {
     if (saved != null) {
       final mode = ThemeMode.values.firstWhere(
         (m) => m.name == saved,
-        orElse: () => ThemeMode.dark,
+        orElse: () => ThemeMode.light,
       );
       state = mode;
       _applySystemUi(mode);

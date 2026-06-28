@@ -53,6 +53,30 @@ class SupabaseBankAccountDatasource {
     return BankAccountModel.fromJson(response as Map<String, dynamic>);
   }
 
+  Future<BankAccountModel> updateBankAccount({
+    required String id,
+    required String holderName,
+    required String bankName,
+    required String accountNumber,
+    String? phone,
+    String? notes,
+  }) async {
+    final data = {
+      'holder_name': holderName,
+      'bank_name': bankName,
+      'account_number': accountNumber,
+      'phone': phone,
+      'notes': notes,
+    };
+    final response = await _client
+        .from(AppConstants.bankAccountsTable)
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+    return BankAccountModel.fromJson(response);
+  }
+
   Future<void> deleteBankAccount(String id) async {
     await _client.from(AppConstants.bankAccountsTable).delete().eq('id', id);
   }

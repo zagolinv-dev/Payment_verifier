@@ -18,6 +18,10 @@ class AppTheme {
   static const Color primaryGreenDim = Color(0xFF1A7A58);
   static const Color primaryGreenDark = Color(0xFF0F4A35);
 
+  // Brighter green for splash & onboarding
+  static const Color brightGreen = Color(0xFF22F090);
+  static const Color brightGreenDim = Color(0xFF18B06A);
+
   static const Color accentGold = Color(0xFFF4A923);
   static const Color accentGoldDim = Color(0xFFF4A92340);
 

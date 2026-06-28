@@ -92,14 +92,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.bgDark,
       body: Stack(
-        children: [
+          children: [
+          // Background gradient
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [AppTheme.brightGreen, Color(0xFF0A1E12)],
+                  stops: [0.0, 0.7],
+                ),
+              ),
+            ),
+          ),
           // Animated background waves
           Positioned.fill(
             child: CustomPaint(
               painter: WavyCurve(
-                color: AppTheme.primaryGreen,
+                color: AppTheme.brightGreen,
                 amplitude: 25,
               ),
             ),
@@ -112,8 +124,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    AppTheme.bgDark.withOpacity(0.3),
-                    AppTheme.bgDark,
+                    Colors.transparent,
+                    const Color(0xFF0A1E12).withOpacity(0.7),
                   ],
                 ),
               ),
@@ -138,7 +150,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           borderRadius: BorderRadius.circular(32),
                           boxShadow: [
                             BoxShadow(
-                              color: AppTheme.primaryGreen.withOpacity(0.4),
+                              color: AppTheme.brightGreen.withOpacity(0.4),
                               blurRadius: 40,
                               offset: const Offset(0, 10),
                             ),

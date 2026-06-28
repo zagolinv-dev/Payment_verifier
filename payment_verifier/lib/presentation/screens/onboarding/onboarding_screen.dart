@@ -19,7 +19,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final _ctrl = PageController();
   int _page = 0;
 
-  static const _gradient = [Color(0xFF1F805B), Color(0xFF0F4A35)];
+  static const _gradient = [Color(0xFF22F090), Color(0xFF0F4A35)];
 
   static const _pages = [
     _OnboardingData(

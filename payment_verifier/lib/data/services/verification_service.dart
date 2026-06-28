@@ -32,6 +32,10 @@ class VerifyConfig {
   final int attemptCount;
   final int maxAttempts;
   final String? ocrDetectedBank;
+  final int maxAgeDays;
+  final String? expectedCustomerName;
+  final String? expectedReceiverName;
+
   const VerifyConfig({
     this.expectedAmount,
     this.businessAccounts = const [],
@@ -39,6 +43,9 @@ class VerifyConfig {
     this.attemptCount = 0,
     this.maxAttempts = 3,
     this.ocrDetectedBank,
+    this.maxAgeDays = 7,
+    this.expectedCustomerName,
+    this.expectedReceiverName,
   });
 }
 
@@ -51,6 +58,17 @@ class VerifyResult {
   final String dateElapsed;
   VerifyResult(this.steps, this.verdict, this.ocr, this.dateElapsed);
   int get passedCount => steps.where((s) => s.passed).length;
+
+  String get status {
+    switch (verdict) {
+      case Verdict.verified:
+        return 'Verified';
+      case Verdict.tryAgain:
+        return 'Suspicious';
+      case Verdict.failed:
+        return 'Rejected';
+    }
+  }
 }
 
 class VerificationService {
@@ -82,6 +100,8 @@ class VerificationService {
     // 1) Payment method match (detected vs selected)
     final detected = ocr.paymentMethod;
     final selected = config.selectedBank;
+    final resolvedBank = selected ?? detected;
+
     if (detected != null && selected != null) {
       final match = _methodMatches(detected, selected);
       if (match) {
@@ -90,20 +110,54 @@ class VerificationService {
         steps.add(VStep('Payment method', 'Detected: $detected, Selected: $selected', StepState.fail));
         failures.add('Payment method mismatch');
       }
+    } else if (detected != null) {
+      steps.add(VStep('Payment method', 'Detected: $detected ✓', StepState.pass));
     } else {
       steps.add(VStep('Payment method', detected ?? 'Not detected', StepState.fail));
       failures.add('Payment method not detected');
     }
 
-    // 2) Customer name
-    if (ocr.customerName != null) {
-      steps.add(VStep('Customer name', ocr.customerName!, StepState.pass));
+    // 2) Customer name / Receiver name match
+    final isTelebirr = _isTelebirr(resolvedBank);
+    if (isTelebirr) {
+      final receiverName = ocr.receiverName;
+      final expectedReceiver = config.expectedReceiverName;
+      if (receiverName != null) {
+        if (expectedReceiver != null) {
+          final match = _namesMatch(receiverName, expectedReceiver);
+          if (match) {
+            steps.add(VStep('Receiver name match', '$receiverName ✓', StepState.pass));
+          } else {
+            steps.add(VStep('Receiver name match', 'Extracted: $receiverName, Expected: $expectedReceiver', StepState.fail));
+            failures.add('Receiver name mismatch');
+          }
+        } else {
+          steps.add(VStep('Receiver name', receiverName, StepState.pass));
+        }
+      } else {
+        steps.add(const VStep('Receiver name', 'Not found', StepState.fail));
+        failures.add('Receiver name not found');
+      }
     } else {
-      steps.add(VStep('Customer name', 'Not found', StepState.fail));
-      failures.add('Customer name not found');
+      final customerName = ocr.customerName;
+      final expectedCustomer = config.expectedCustomerName;
+      if (customerName != null) {
+        if (expectedCustomer != null) {
+          final match = _namesMatch(customerName, expectedCustomer);
+          if (match) {
+            steps.add(VStep('Customer name match', '$customerName ✓', StepState.pass));
+          } else {
+            steps.add(VStep('Customer name match', 'Extracted: $customerName, Expected: $expectedCustomer', StepState.fail));
+            failures.add('Customer name mismatch');
+          }
+        } else {
+          steps.add(VStep('Customer name', customerName, StepState.pass));
+        }
+      } else {
+        steps.add(const VStep('Customer name', 'Not found', StepState.fail));
+        failures.add('Customer name not found');
+      }
     }
-
-    final isTelebirr = _isTelebirr(config.selectedBank);
 
     // 3) Extract amount
     final amount = ocr.amountValue;
@@ -132,7 +186,15 @@ class VerificationService {
           StepState.pass));
     }
 
-    // 5) Extract receiver account
+    // 5) Transaction ID / Reference
+    if (ref != null && ref.isNotEmpty) {
+      steps.add(VStep('Transaction ID', ref, StepState.pass));
+    } else {
+      steps.add(const VStep('Transaction ID', 'Not found', StepState.fail));
+      failures.add('Transaction ID not found');
+    }
+
+    // 6) Extract receiver account
     final receiverAcct = ocr.receiverAccount;
     if (receiverAcct != null) {
       steps.add(VStep('Extract receiver account', receiverAcct, StepState.pass));
@@ -143,7 +205,7 @@ class VerificationService {
       failures.add('Receiver account not found');
     }
 
-    // 6) Receiver account match (compare with business accounts)
+    // 7) Receiver account match (compare with business accounts)
     if (isTelebirr) {
       steps.add(const VStep('Account match', 'N/A (Telebirr)', StepState.pass));
     } else if (config.businessAccounts.isEmpty) {
@@ -159,18 +221,26 @@ class VerificationService {
       failures.add('Account not yours');
     }
 
-    // 7) Date & elapsed time
+    // 8) Date & freshness check
     String dateElapsed = 'Unknown';
+    String freshness = '';
     final dt = parseReceiptDate(ocr.date);
     if (dt != null) {
       dateElapsed = _elapsed(dt, now);
-      steps.add(VStep('Transaction date', '$dateElapsed', StepState.pass));
+      final ageDays = now.difference(dt).inDays;
+      if (ageDays > config.maxAgeDays) {
+        freshness = 'Receipt is $ageDays days old (max ${config.maxAgeDays})';
+        steps.add(VStep('Transaction date', 'Too old — $dateElapsed', StepState.fail));
+        failures.add(freshness);
+      } else {
+        steps.add(VStep('Transaction date', dateElapsed, StepState.pass));
+      }
     } else {
       steps.add(VStep('Transaction date', ocr.date ?? 'Not found', StepState.fail));
       failures.add('Date not found');
     }
 
-    // 8) Duplicate check
+    // 9) Duplicate check
     if (ref == null) {
       steps.add(const VStep('Duplicate check', 'No reference', StepState.fail));
       failures.add('No reference');
@@ -199,6 +269,22 @@ class VerificationService {
     }
 
     return VerifyResult(steps, verdict, ocr, dateElapsed);
+  }
+
+  bool _namesMatch(String name1, String name2) {
+    final n1 = name1.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '').split(' ').where((w) => w.length > 1).toSet();
+    final n2 = name2.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '').split(' ').where((w) => w.length > 1).toSet();
+    if (n1.isEmpty || n2.isEmpty) {
+      final clean1 = name1.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final clean2 = name2.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      return clean1 == clean2 || clean1.contains(clean2) || clean2.contains(clean1);
+    }
+    final intersection = n1.intersection(n2);
+    if (intersection.isNotEmpty) return true;
+    
+    final clean1 = name1.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final clean2 = name2.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    return clean1.contains(clean2) || clean2.contains(clean1);
   }
 
   String _canonicalBank(String name) {

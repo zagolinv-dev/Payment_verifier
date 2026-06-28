@@ -55,6 +55,8 @@ class DashboardMetrics {
     required this.failedToday,
     required this.todayTotal,
     required this.todayCount,
+    required this.totalVerified,
+    required this.totalFailed,
   });
 
   final double totalIncome;
@@ -63,4 +65,6 @@ class DashboardMetrics {
   final int failedToday;
   final double todayTotal;
   final int todayCount;
+  final int totalVerified;
+  final int totalFailed;
 }

@@ -7,6 +7,7 @@ import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/core/utils/formatters.dart';
 import 'package:payment_verifier/presentation/providers/user_provider.dart';
 import 'package:payment_verifier/core/constants/app_constants.dart';
+import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 import 'package:payment_verifier/domain/repositories/transaction_repository.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
@@ -57,6 +58,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     final isDark = themeMode == ThemeMode.dark;
     final metricsAsync = ref.watch(dashboardMetricsProvider);
     final weeklyAsync = ref.watch(weeklyTotalsProvider);
+    final allTxsAsync = ref.watch(transactionsProvider);
     final isAdmin = ref.watch(isAdminProvider);
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
@@ -132,18 +134,15 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                   textPrimary: textPrimary,
                   textSecondary: textSecondary,
                   borderColor: borderColor,
-                  child: weeklyAsync.when(
-                    data: (weekly) => AnimatedBuilder(
-                      animation: _progress,
-                      builder: (_, __) => _RevenueLineChart(
-                        period: _period,
-                        progress: _progress.value,
-                        isDark: isDark,
-                        weeklyTotals: weekly,
-                      ),
+                  child: AnimatedBuilder(
+                    animation: _progress,
+                    builder: (_, __) => _RevenueLineChart(
+                      period: _period,
+                      progress: _progress.value,
+                      isDark: isDark,
+                      weeklyTotals: weeklyAsync.valueOrNull ?? {},
+                      allTransactions: allTxsAsync.valueOrNull ?? [],
                     ),
-                    loading: () => const SizedBox(height: 160),
-                    error: (_, __) => const SizedBox(height: 160),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -157,18 +156,15 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                   textPrimary: textPrimary,
                   textSecondary: textSecondary,
                   borderColor: borderColor,
-                  child: weeklyAsync.when(
-                    data: (weekly) => AnimatedBuilder(
-                      animation: _progress,
-                      builder: (_, __) => _TipsBarChart(
-                        period: _period,
-                        progress: _progress.value,
-                        isDark: isDark,
-                        weeklyTotals: weekly,
-                      ),
+                  child: AnimatedBuilder(
+                    animation: _progress,
+                    builder: (_, __) => _TipsBarChart(
+                      period: _period,
+                      progress: _progress.value,
+                      isDark: isDark,
+                      weeklyTotals: weeklyAsync.valueOrNull ?? {},
+                      allTransactions: allTxsAsync.valueOrNull ?? [],
                     ),
-                    loading: () => const SizedBox(height: 160),
-                    error: (_, __) => const SizedBox(height: 160),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -184,8 +180,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                   borderColor: borderColor,
                   child: metricsAsync.when(
                     data: (m) => _DonutChart(
-                      verified: m.verifiedToday,
-                      failed: m.failedToday,
+                      verified: m.totalVerified,
+                      failed: m.totalFailed,
                       isDark: isDark,
                       textPrimary: textPrimary,
                       textSecondary: textSecondary,
@@ -468,29 +464,75 @@ class _RevenueLineChart extends StatelessWidget {
     required this.progress,
     required this.isDark,
     this.weeklyTotals = const {},
+    this.allTransactions = const [],
   });
 
   final String period;
   final double progress;
   final bool isDark;
   final Map<String, double> weeklyTotals;
+  final List<TransactionEntity> allTransactions;
 
   List<FlSpot> get _spots {
-    if (period == 'Weekly' && weeklyTotals.isNotEmpty) {
+    if (period == 'Weekly') {
       final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return List.generate(7, (i) => FlSpot(i.toDouble(), (weeklyTotals[dayNames[i]] ?? 0) * progress));
     }
-    final raw = period == 'Daily'
-        ? [0.3, 0.5, 0.4, 0.8, 0.6, 0.9, 0.7, 1.0, 0.85, 0.75]
-        : period == 'Monthly'
-            ? [0.4, 0.6, 0.55, 0.7, 0.85, 0.9, 0.8, 0.95, 1.0, 0.88, 0.92, 0.87]
-            : period == 'Yearly'
-                ? [0.3, 0.45, 0.6, 0.5, 0.7, 0.8, 0.75, 0.9, 0.85, 0.95, 1.0, 0.9]
-                : [0.45, 0.72, 0.58, 0.90, 0.65, 1.0, 0.35];
-    return List.generate(
-      raw.length,
-      (i) => FlSpot(i.toDouble(), raw[i] * 12000 * progress),
-    );
+
+    final now = DateTime.now();
+    if (period == 'Daily') {
+      final totals = <double>[0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (final tx in allTransactions) {
+        final daysAgo = now.difference(tx.createdAt).inDays;
+        if (daysAgo >= 0 && daysAgo < 10) {
+          totals[9 - daysAgo] += tx.amount + tx.tip;
+        }
+      }
+      final maxVal = totals.reduce((a, b) => a > b ? a : b);
+      return List.generate(10, (i) => FlSpot(i.toDouble(), (maxVal > 0 ? totals[i] / maxVal : 0) * 12000 * progress));
+    }
+
+    if (period == 'Monthly') {
+      final totals = <double>[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (final tx in allTransactions) {
+        if (tx.createdAt.year == now.year) {
+          totals[tx.createdAt.month - 1] += tx.amount + tx.tip;
+        }
+      }
+      final maxVal = totals.reduce((a, b) => a > b ? a : b);
+      return List.generate(12, (i) => FlSpot(i.toDouble(), (maxVal > 0 ? totals[i] / maxVal : 0) * 12000 * progress));
+    }
+
+    if (period == 'Yearly') {
+      final totals = <int, double>{};
+      for (final tx in allTransactions) {
+        totals[tx.createdAt.year] = (totals[tx.createdAt.year] ?? 0) + tx.amount + tx.tip;
+      }
+      final years = totals.keys.toList()..sort();
+      final maxVal = totals.values.reduce((a, b) => a > b ? a : b);
+      return List.generate(years.length, (i) => FlSpot(i.toDouble(), (maxVal > 0 ? (totals[years[i]]! / maxVal) : 0) * 12000 * progress));
+    }
+
+    return [];
+  }
+
+  List<String> _bottomLabels() {
+    if (period == 'Daily') {
+      final now = DateTime.now();
+      return List.generate(10, (i) {
+        final d = now.subtract(Duration(days: 9 - i));
+        return '${d.month}/${d.day}';
+      });
+    }
+    if (period == 'Monthly') {
+      return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    }
+    if (period == 'Yearly') {
+      final years = allTransactions.map((t) => t.createdAt.year).toSet().toList()..sort();
+      if (years.isEmpty) return [DateTime.now().year.toString()];
+      return years.map((y) => "'${y.toString().substring(2)}").toList();
+    }
+    return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   }
 
   @override
@@ -534,13 +576,7 @@ class _RevenueLineChart extends StatelessWidget {
                 showTitles: true,
                 reservedSize: 22,
                 getTitlesWidget: (v, _) {
-                  final labels = period == 'Daily'
-                      ? ['8a','9a','10a','11a','12p','1p','2p','3p','4p','5p']
-                      : period == 'Monthly'
-                          ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-                          : period == 'Yearly'
-                              ? ['\'18','\'19','\'20','\'21','\'22','\'23','\'24','\'25','\'26','\'27','\'28','\'29']
-                              : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                  final labels = _bottomLabels();
                   if (v.toInt() >= labels.length) return const SizedBox.shrink();
                   return Text(
                     labels[v.toInt()],
@@ -594,33 +630,55 @@ class _TipsBarChart extends StatelessWidget {
     required this.progress,
     required this.isDark,
     this.weeklyTotals = const {},
+    this.allTransactions = const [],
   });
 
   final String period;
   final double progress;
   final bool isDark;
   final Map<String, double> weeklyTotals;
+  final List<TransactionEntity> allTransactions;
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
     final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     List<double> raw;
     List<String> labels;
 
-    if (period == 'Weekly' && weeklyTotals.isNotEmpty) {
+    if (period == 'Weekly') {
       raw = dayNames.map((d) => weeklyTotals[d] ?? 0).toList();
       labels = dayNames;
+    } else if (period == 'Daily') {
+      final totals = <double>[0, 0, 0, 0, 0, 0, 0];
+      for (final tx in allTransactions) {
+        final daysAgo = now.difference(tx.createdAt).inDays;
+        if (daysAgo >= 0 && daysAgo < 7) {
+          totals[6 - daysAgo] += tx.tip;
+        }
+      }
+      raw = totals;
+      labels = List.generate(7, (i) {
+        final d = now.subtract(Duration(days: 6 - i));
+        return '${d.month}/${d.day}';
+      });
+    } else if (period == 'Monthly') {
+      final totals = <double>[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (final tx in allTransactions) {
+        if (tx.createdAt.year == now.year) {
+          totals[tx.createdAt.month - 1] += tx.tip;
+        }
+      }
+      raw = totals;
+      labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     } else {
-      raw = period == 'Daily'
-          ? [120.0, 180.0, 90.0, 240.0, 160.0, 300.0, 210.0]
-          : period == 'Monthly'
-              ? [800.0, 1200.0, 950.0, 1400.0, 1100.0, 1600.0, 1350.0, 1800.0, 1500.0, 2000.0, 1700.0, 2200.0]
-              : [600.0, 850.0, 720.0, 1100.0, 980.0, 1400.0, 1200.0];
-      labels = period == 'Daily'
-          ? dayNames
-          : period == 'Monthly'
-              ? ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
-              : dayNames;
+      final totals = <int, double>{};
+      for (final tx in allTransactions) {
+        totals[tx.createdAt.year] = (totals[tx.createdAt.year] ?? 0) + tx.tip;
+      }
+      final years = totals.keys.toList()..sort();
+      raw = years.map((y) => totals[y]!).toList();
+      labels = years.map((y) => y.toString()).toList();
     }
     final maxVal = raw.reduce(math.max);
 

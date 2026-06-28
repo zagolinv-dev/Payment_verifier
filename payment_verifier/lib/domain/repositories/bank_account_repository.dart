@@ -10,5 +10,13 @@ abstract class BankAccountRepository {
     String? notes,
   });
   Future<BankAccountEntity> toggleActive(String id, bool isActive);
+  Future<BankAccountEntity> updateBankAccount({
+    required String id,
+    required String holderName,
+    required String bankName,
+    required String accountNumber,
+    String? phone,
+    String? notes,
+  });
   Future<void> deleteBankAccount(String id);
 }

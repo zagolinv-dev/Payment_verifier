@@ -30,6 +30,23 @@ class BankAccountRepositoryImpl implements BankAccountRepository {
       _datasource.toggleActive(id, isActive);
 
   @override
+  Future<BankAccountEntity> updateBankAccount({
+    required String id,
+    required String holderName,
+    required String bankName,
+    required String accountNumber,
+    String? phone,
+    String? notes,
+  }) => _datasource.updateBankAccount(
+        id: id,
+        holderName: holderName,
+        bankName: bankName,
+        accountNumber: accountNumber,
+        phone: phone,
+        notes: notes,
+      );
+
+  @override
   Future<void> deleteBankAccount(String id) =>
       _datasource.deleteBankAccount(id);
 }

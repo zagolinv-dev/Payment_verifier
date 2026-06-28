@@ -57,6 +57,32 @@ class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
+  Future<bool> updateAccount({
+    required String id,
+    required String holderName,
+    required String bankName,
+    required String accountNumber,
+    String? phone,
+    String? notes,
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repo.updateBankAccount(
+        id: id,
+        holderName: holderName,
+        bankName: bankName,
+        accountNumber: accountNumber,
+        phone: phone,
+        notes: notes,
+      );
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
   Future<bool> deleteAccount(String id) async {
     try {
       await _repo.deleteBankAccount(id);
