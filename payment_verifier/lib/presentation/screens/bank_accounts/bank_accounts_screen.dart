@@ -488,7 +488,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                         dropdownColor: dropdownBg,
                         icon: const Icon(Icons.keyboard_arrow_down_rounded,
                             color: AppTheme.textSecondary),
-                        items: BankName.values
+                        items: BankName.addAccountOptions
                             .map((b) => DropdownMenuItem(
                                   value: b.displayName,
                                   child: Text(b.displayName,

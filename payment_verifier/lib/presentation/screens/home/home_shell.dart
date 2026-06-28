@@ -148,6 +148,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       case AppRoutes.manageUsers: return 'Manage Team';
       case AppRoutes.reports: return 'Reports';
       case AppRoutes.settings: return 'Settings';
+      case AppRoutes.about: return 'About';
       default: return '';
     }
   }
