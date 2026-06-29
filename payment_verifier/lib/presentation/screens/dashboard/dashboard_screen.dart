@@ -214,6 +214,14 @@ class DashboardScreen extends ConsumerWidget {
                       onTap: () async {
                         final txs = ref.read(recentTransactionsProvider).valueOrNull ?? [];
                         if (txs.isEmpty) return;
+                        if (!isAdmin) {
+                          // Waiter — export only their own receipts
+                          ReceiptPdfExport.exportWaiterReceipts(
+                            transactions: txs,
+                            waiterName: user?.displayName ?? 'Waiter',
+                          );
+                          return;
+                        }
                         final ids = <String, String>{};
                         for (final tx in txs) {
                           if (tx.verifiedBy != null) ids[tx.verifiedBy!] = tx.verifiedBy!;

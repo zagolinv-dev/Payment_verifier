@@ -19,8 +19,8 @@ class TransactionRepositoryImpl implements TransactionRepository {
       );
 
   @override
-  Future<List<TransactionEntity>> getRecentTransactions({int limit = 5}) =>
-      _datasource.getRecentTransactions(limit: limit);
+  Future<List<TransactionEntity>> getRecentTransactions({int limit = 5, String? userId}) =>
+      _datasource.getRecentTransactions(limit: limit, userId: userId);
 
   @override
   Future<TransactionEntity> createTransaction({
@@ -48,30 +48,30 @@ class TransactionRepositoryImpl implements TransactionRepository {
       );
 
   @override
-  Future<DashboardMetrics> getDashboardMetrics() =>
-      _datasource.getDashboardMetrics();
+  Future<DashboardMetrics> getDashboardMetrics({String? userId}) =>
+      _datasource.getDashboardMetrics(userId: userId);
 
   @override
-  Future<double> getTotalIncome() async {
-    final metrics = await _datasource.getDashboardMetrics();
+  Future<double> getTotalIncome({String? userId}) async {
+    final metrics = await _datasource.getDashboardMetrics(userId: userId);
     return metrics.totalIncome;
   }
 
   @override
-  Future<double> getTotalTips() async {
-    final metrics = await _datasource.getDashboardMetrics();
+  Future<double> getTotalTips({String? userId}) async {
+    final metrics = await _datasource.getDashboardMetrics(userId: userId);
     return metrics.totalTips;
   }
 
   @override
-  Future<({int verified, int failed})> getTodayVerificationCounts() async {
-    final metrics = await _datasource.getDashboardMetrics();
+  Future<({int verified, int failed})> getTodayVerificationCounts({String? userId}) async {
+    final metrics = await _datasource.getDashboardMetrics(userId: userId);
     return (verified: metrics.verifiedToday, failed: metrics.failedToday);
   }
 
   @override
-  Future<({double total, int count})> getTodaySummary() async {
-    final metrics = await _datasource.getDashboardMetrics();
+  Future<({double total, int count})> getTodaySummary({String? userId}) async {
+    final metrics = await _datasource.getDashboardMetrics(userId: userId);
     return (total: metrics.todayTotal, count: metrics.todayCount);
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:payment_verifier/core/router/app_router.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 
@@ -26,7 +27,7 @@ class AboutScreen extends ConsumerWidget {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_rounded, color: textPrimary),
-          onPressed: () => context.pop(),
+          onPressed: () => context.go(AppRoutes.settings),
         ),
         title: Text('About', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: textPrimary)),
         centerTitle: true,

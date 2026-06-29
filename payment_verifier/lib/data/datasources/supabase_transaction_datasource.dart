@@ -57,10 +57,13 @@ class SupabaseTransactionDatasource {
     return transactions;
   }
 
-  Future<List<TransactionModel>> getRecentTransactions({int limit = 5}) async {
-    final response = await _client
+  Future<List<TransactionModel>> getRecentTransactions({int limit = 5, String? userId}) async {
+    // Filters (eq) must come before transform operations (order, limit)
+    final base = _client
         .from(AppConstants.transactionsTable)
-        .select()
+        .select();
+    final filtered = userId != null ? base.eq('verified_by', userId) : base;
+    final response = await filtered
         .order('created_at', ascending: false)
         .limit(limit);
 
@@ -112,21 +115,25 @@ class SupabaseTransactionDatasource {
         .eq('id', id);
   }
 
-  Future<DashboardMetrics> getDashboardMetrics() async {
+  Future<DashboardMetrics> getDashboardMetrics({String? userId}) async {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     final todayEnd = todayStart.add(const Duration(days: 1));
 
-    final todayResponse = await _client
+    var todayQuery = _client
         .from(AppConstants.transactionsTable)
         .select('amount, tip, status')
         .gte('created_at', todayStart.toIso8601String())
         .lt('created_at', todayEnd.toIso8601String());
+    if (userId != null) todayQuery = todayQuery.eq('verified_by', userId);
+    final todayResponse = await todayQuery;
     final todayTxs = (todayResponse as List).cast<Map<String, dynamic>>();
 
-    final allResponse = await _client
+    var allQuery = _client
         .from(AppConstants.transactionsTable)
         .select('amount, tip, status');
+    if (userId != null) allQuery = allQuery.eq('verified_by', userId);
+    final allResponse = await allQuery;
     final allTxs = (allResponse as List).cast<Map<String, dynamic>>();
 
     double totalIncome = 0, totalTips = 0;

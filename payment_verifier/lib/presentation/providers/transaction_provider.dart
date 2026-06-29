@@ -82,13 +82,19 @@ final transactionsProvider =
 final recentTransactionsProvider =
     FutureProvider.autoDispose<List<TransactionEntity>>((ref) async {
   final repo = ref.watch(transactionRepositoryProvider);
-  return repo.getRecentTransactions(limit: 5);
+  final user = ref.watch(currentUserProvider);
+  // Waiters only see their own recent transactions
+  final userId = (user != null && !user.isAdmin) ? user.id : null;
+  return repo.getRecentTransactions(limit: 5, userId: userId);
 });
 
 final dashboardMetricsProvider =
     FutureProvider.autoDispose<DashboardMetrics>((ref) async {
   final repo = ref.watch(transactionRepositoryProvider);
-  return repo.getDashboardMetrics();
+  final user = ref.watch(currentUserProvider);
+  // Waiters only see their own metrics; admins see everything
+  final userId = (user != null && !user.isAdmin) ? user.id : null;
+  return repo.getDashboardMetrics(userId: userId);
 });
 
 final deleteTransactionProvider =
