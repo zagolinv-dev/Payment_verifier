@@ -65,12 +65,6 @@ class BankAccountNotifier
     try {
       final updated = await _repo.toggleActive(id, isActive);
       _replaceById(updated);
-      final account = await _repo.toggleActive(id, isActive);
-      await _notifDatasource.createNotification(
-        type: 'info',
-        title: isActive ? 'Bank Account Activated' : 'Bank Account Deactivated',
-        message: '${account.bankName} — ${account.holderName} is now ${isActive ? "active" : "inactive"}.',
-      );
       return true;
     } catch (_) {
       return false;

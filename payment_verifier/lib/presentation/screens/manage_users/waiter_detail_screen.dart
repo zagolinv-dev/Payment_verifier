@@ -191,17 +191,7 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
                   child: InteractiveViewer(
                     minScale: 1.0,
                     maxScale: 5.0,
-                    child: Image.file(
-                      File(tx.receiptImage!),
-                      width: double.infinity,
-                      height: 300,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Container(
-                        height: 200,
-                        color: card,
-                        child: const Center(child: Icon(Icons.broken_image_rounded, size: 48, color: AppTheme.textTertiary)),
-                      ),
-                    ),
+                    child: _buildReceiptImage(tx.receiptImage!, card),
                   ),
                 ),
               // Details
@@ -274,6 +264,42 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildReceiptImage(String path, Color card) {
+    final isUrl = path.startsWith('http://') || path.startsWith('https://');
+    if (isUrl) {
+      return Image.network(
+        path,
+        width: double.infinity,
+        height: 300,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => Container(
+          height: 200,
+          color: card,
+          child: const Center(child: Icon(Icons.broken_image_rounded, size: 48, color: AppTheme.textTertiary)),
+        ),
+        loadingBuilder: (_, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            height: 200,
+            color: card,
+            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        },
+      );
+    }
+    return Image.file(
+      File(path),
+      width: double.infinity,
+      height: 300,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => Container(
+        height: 200,
+        color: card,
+        child: const Center(child: Icon(Icons.broken_image_rounded, size: 48, color: AppTheme.textTertiary)),
       ),
     );
   }

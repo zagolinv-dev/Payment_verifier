@@ -104,7 +104,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final isAdmin = ref.watch(isAdminProvider);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
-    final isAdmin = ref.watch(isAdminProvider);
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
     final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
@@ -258,10 +257,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           itemCount: txs.length,
                           itemBuilder: (ctx, i) {
                             final tx = txs[i];
-                             onDelete: isAdmin
-                                ? () => _confirmDeleteTransaction(context, ref, txs[i])
-                                : null,
-                            final tile = TransactionListItem(transaction: tx);
+                            final tile = TransactionListItem(
+                              transaction: tx,
+                              onDelete: isAdmin
+                                  ? () => _confirmDeleteTransaction(context, ref, txs[i])
+                                  : null,
+                            );
                             if (!isAdmin) return tile;
                             return Dismissible(
                               key: ValueKey(tx.id),
@@ -377,10 +378,10 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   static const _statusFilters = ['All Status', 'VERIFIED', 'FAILED', 'NEEDS_REVIEW', 'DUPLICATE', 'FRAUD_SUSPECTED'];
   static const _bankFilters = [
     'All Banks',
-    'Commercial Bank of Ethiopia',
+    'CBE',
+    'BOA',
     'Telebirr',
-    'CBE Birr',
-    'Awash Bank',
+    'Awash',
   ];
 
   Color _statusColor(String filter) {

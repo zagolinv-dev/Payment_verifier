@@ -116,7 +116,6 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
     showBlurredBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => DraggableScrollableSheet(
         initialChildSize: 0.85,
         minChildSize: 0.4,
@@ -147,7 +146,6 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
     showBlurredBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => DraggableScrollableSheet(
         initialChildSize: 0.85,
         minChildSize: 0.4,

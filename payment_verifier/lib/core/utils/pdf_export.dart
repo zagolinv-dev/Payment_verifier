@@ -14,6 +14,37 @@ class ReceiptPdfExport {
   }) async {
     final pdf = pw.Document();
 
+    // Pre-fetch network image bytes for PDF embedding
+    final imageBytes = <String, Uint8List>{};
+    for (final txs in grouped.values) {
+      for (final tx in txs) {
+        final img = tx.receiptImage;
+        if (img == null) continue;
+        if (img.startsWith('http://') || img.startsWith('https://')) {
+          try {
+            final client = HttpClient();
+            final request = await client.getUrl(Uri.parse(img));
+            final response = await request.close();
+            if (response.statusCode == 200) {
+              final bytes = <int>[];
+              await for (final chunk in response) {
+                bytes.addAll(chunk);
+              }
+              imageBytes[tx.id] = Uint8List.fromList(bytes);
+            }
+            client.close();
+          } catch (_) {}
+        } else {
+          try {
+            final file = File(img);
+            if (file.existsSync()) {
+              imageBytes[tx.id] = file.readAsBytesSync();
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -183,9 +214,8 @@ class ReceiptPdfExport {
                 final rowWidgets = <pw.Widget>[];
                 for (final tx in rowTxs) {
                   try {
-                    final file = File(tx.receiptImage!);
-                    if (file.existsSync()) {
-                      final bytes = file.readAsBytesSync();
+                    final bytes = imageBytes[tx.id];
+                    if (bytes != null) {
                       final img = pw.MemoryImage(bytes);
                       rowWidgets.add(
                         pw.Expanded(
