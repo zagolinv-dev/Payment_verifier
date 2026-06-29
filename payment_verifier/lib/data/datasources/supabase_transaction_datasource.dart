@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/data/models/transaction_model.dart';
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
@@ -25,12 +27,22 @@ class SupabaseTransactionDatasource {
 
     if (statusFilter != null && statusFilter != 'All Status') {
       transactions = transactions
-          .where((t) => t.status.name.toUpperCase() == statusFilter.toUpperCase())
+          .where((t) => t.status.value == statusFilter)
           .toList();
     }
     if (bankFilter != null && bankFilter != 'All Banks') {
-      transactions =
-          transactions.where((t) => t.bankName == bankFilter).toList();
+      final filter = bankFilter.trim().toLowerCase();
+      final matchingBank = BankName.values.firstWhere(
+        (b) => b.displayName.toLowerCase() == filter || b.shortName.toLowerCase() == filter,
+        orElse: () => BankName.values.first,
+      );
+      transactions = transactions
+          .where((t) {
+            final name = t.bankName.trim().toLowerCase();
+            return name == matchingBank.displayName.toLowerCase() ||
+                name == matchingBank.shortName.toLowerCase();
+          })
+          .toList();
     }
     if (searchQuery != null && searchQuery.isNotEmpty) {
       final q = searchQuery.toLowerCase();
@@ -198,6 +210,23 @@ class SupabaseTransactionDatasource {
       'verified_by': userId,
       'created_at': DateTime.now().toIso8601String(),
     });
+  }
+
+  Future<String?> uploadReceiptImage(String localPath) async {
+    try {
+      final userId = _client.auth.currentUser?.id ?? 'anonymous';
+      final fileName = 'receipt_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final storagePath = '$userId/$fileName';
+      await _client.storage.from('receipts').upload(
+        storagePath,
+        File(localPath),
+        fileOptions: const FileOptions(contentType: 'image/jpeg'),
+      );
+      return _client.storage.from('receipts').getPublicUrl(storagePath);
+    } catch (e) {
+      debugPrint('[uploadReceiptImage] failed: $e');
+      return null;
+    }
   }
 
   Future<void> deleteTransaction(String id) async {

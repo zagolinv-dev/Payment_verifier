@@ -10,6 +10,7 @@ class PushNotificationService {
   StreamSubscription? _subscription;
   bool _initialized = false;
   String? _currentUserId;
+  bool _initialSnapshotSkipped = false;
 
   Future<void> init() async {
     if (_initialized) return;
@@ -81,10 +82,17 @@ class PushNotificationService {
         .eq('user_id', userId)
         .listen((List<Map<String, dynamic>> data) {
       if (data.isEmpty) return;
+      if (!_initialSnapshotSkipped) {
+        _initialSnapshotSkipped = true;
+        return;
+      }
       final latest = data.last;
+      final id = latest['id'] as String?;
+      if (id == null) return;
+      final isRead = latest['is_read'] as bool? ?? false;
+      if (isRead) return;
       final title = latest['title'] as String? ?? 'T\'s Verify';
       final body = latest['message'] as String? ?? '';
-      final id = latest['id'] as String?;
       if (title.isNotEmpty && body.isNotEmpty) {
         showNotification(title: title, body: body, payload: id);
       }
@@ -95,5 +103,6 @@ class PushNotificationService {
     _subscription?.cancel();
     _subscription = null;
     _currentUserId = null;
+    _initialSnapshotSkipped = false;
   }
 }

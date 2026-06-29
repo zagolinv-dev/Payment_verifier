@@ -130,16 +130,29 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
   void _showAddModal(BuildContext context) {
     showBlurredBottomSheet(
       context: context,
-      builder: (_) => _AddBankAccountModal(
-        onSubmit: (data) async {
-          await ref.read(bankAccountNotifierProvider.notifier).createAccount(
-            holderName: data['holderName']!,
-            bankName: data['bankName']!,
-            accountNumber: data['accountNumber']!,
-            phone: data['phone'],
-            notes: data['notes'],
-          );
-        },
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _AddBankAccountModal(
+          scrollController: scrollController,
+          onSubmit: (data) async {
+            final success = await ref
+                .read(bankAccountNotifierProvider.notifier)
+                .createAccount(
+                  holderName: data['holderName']!,
+                  bankName: data['bankName']!,
+                  accountNumber: data['accountNumber']!,
+                  phone: data['phone'],
+                  notes: data['notes'],
+                );
+            if (success) {
+              ref.invalidate(bankAccountsProvider);
+            }
+          },
+        ),
       ),
     );
   }
@@ -147,18 +160,31 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
   void _showEditModal(BuildContext context, BankAccountEntity account) {
     showBlurredBottomSheet(
       context: context,
-      builder: (_) => _AddBankAccountModal(
-        initial: account,
-        onSubmit: (data) async {
-          await ref.read(bankAccountNotifierProvider.notifier).updateAccount(
-            id: account.id,
-            holderName: data['holderName']!,
-            bankName: data['bankName']!,
-            accountNumber: data['accountNumber']!,
-            phone: data['phone'],
-            notes: data['notes'],
-          );
-        },
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _AddBankAccountModal(
+          scrollController: scrollController,
+          initial: account,
+          onSubmit: (data) async {
+            final success = await ref
+                .read(bankAccountNotifierProvider.notifier)
+                .updateAccount(
+                  id: account.id,
+                  holderName: data['holderName']!,
+                  bankName: data['bankName']!,
+                  accountNumber: data['accountNumber']!,
+                  phone: data['phone'],
+                  notes: data['notes'],
+                );
+            if (success) {
+              ref.invalidate(bankAccountsProvider);
+            }
+          },
+        ),
       ),
     );
   }
