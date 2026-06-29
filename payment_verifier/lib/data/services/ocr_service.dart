@@ -267,6 +267,14 @@ class OcrService {
     ).firstMatch(text);
     if (teleLabelled != null) return _money(teleLabelled.group(1));
 
+    // Telebirr table-receipt: "-6.00 (ETB)" or "-2.00 (ETB)"
+    final teleTable = RegExp(
+      r'^-\s*([\d,]+(?:\.\d{1,2})?)\s*\(\s*ETB\s*\)',
+      caseSensitive: false,
+      multiLine: true,
+    ).firstMatch(text);
+    if (teleTable != null) return _money(teleTable.group(1));
+
     final telePaid = RegExp(
       r'(?:you\s+have\s+)?(?:paid|transferred|sent)\s+(?:ETB\s*)?([\d,]+(?:\.\d{1,2})?)\s*(?:ETB|Birr)?\s+to\b',
       caseSensitive: false,
@@ -402,6 +410,17 @@ class OcrService {
   }
 
   String? _telebirrReceiverName(String text) {
+    // Telebirr table receipt: "Transaction To: belayneh"
+    final transTo = RegExp(
+      r'Transaction\s+To\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9 ._@+]{1,50}?)(?:\s*$|\n)',
+      caseSensitive: false,
+      multiLine: true,
+    ).firstMatch(text);
+    if (transTo != null) {
+      final raw = transTo.group(1)?.trim();
+      if (raw != null && raw.isNotEmpty) return raw.toUpperCase();
+    }
+
     final m0 = RegExp(
       r'(?:paid|transferred|sent)\s+(?:ETB\s*)?[\d,]+(?:\.\d{1,2})?\s*(?:ETB|Birr)?\s+to\s+([A-Za-z0-9][A-Za-z0-9 .&]{2,50}?)(?:\s*\(|\s+successful|\s+on\b)',
       caseSensitive: false,
@@ -523,6 +542,11 @@ class OcrService {
         t.contains('tele birr') || t.contains('telle birr') ||
         t.contains('ethiotelecom') || t.contains('ethio telecom') ||
         t.contains('etelebirr') || t.contains('e-telebirr')) return 'telebirr';
+    // Telebirr table-style receipt: "Transaction To" + "Transaction Number" labels
+    // (the word "telebirr" may not appear in OCR output)
+    if ((t.contains('transaction to') || t.contains('transaction number')) &&
+        (t.contains('transfer money') || t.contains('payment qr code') ||
+         t.contains('payment method') || t.contains('transaction type'))) return 'telebirr';
     if (t.contains('m-pesa') || t.contains('mpesa')) return 'mpesa';
     if (t.contains('cbe birr')) return 'cbe_birr';
     if (t.contains('awashbank') || t.contains('awash bank') || t.contains('awashbirr')) return 'awash';
@@ -827,9 +851,12 @@ String? extractCustomerName(String text,
       if (n != null) return n;
     }
 
-    // Negid SMS format: "ETB X debited from SENDER NAME for RECEIVER NAME-ETB-ACCT"
+    // CBE app receipt / message format:
+    // "ETB X has been debited from SENDER NAME ETB-ACCT for RECEIVER NAME ETB-ACCT"
+    // "ETB X debited from SENDER NAME for RECEIVER"
+    // The sender name is between "debited from" and either "ETB-ACCT for" or just "for"
     final dbt = RegExp(
-      r'debited\s+from\s+([A-Za-z][A-Za-z .]{2,50}?)\s+for\b',
+      r'debited\s+from\s+([A-Za-z][A-Za-z .]{2,50}?)(?:\s+ETB[-\s]?\d[\d]*(?:\s*for\b)|\s+for\b)',
       caseSensitive: false,
     ).firstMatch(flat);
     if (dbt != null) {
@@ -837,9 +864,9 @@ String? extractCustomerName(String text,
       if (n != null) return n;
     }
 
-    // Also try greedy version in case lazy stops too early
+    // Greedy fallback — captures up to the ETB-ACCT boundary
     final dbtGreedy = RegExp(
-      r'debited\s+from\s+([A-Za-z][A-Za-z .]{5,60})\s+for\b',
+      r'debited\s+from\s+([A-Za-z][A-Za-z .]{5,60}?)\s+(?:ETB[-\s]?\d|for\b)',
       caseSensitive: false,
     ).firstMatch(flat);
     if (dbtGreedy != null) {
@@ -898,16 +925,6 @@ String? extractCustomerName(String text,
     ).firstMatch(text);
     if (lblRe != null) {
       final n = tryName(lblRe.group(1));
-      if (n != null) return n;
-    }
-
-    // CBE SMS: "Completed ETB60.61 transfer From Eden Belayineh Ayalew to ..."
-    final smsSender = RegExp(
-      r'[Cc]ompleted\s+ETB[\d,]+(?:\.\d{1,2})?\s+transfer\s+[Ff]rom\s+([A-Za-z][A-Za-z .]{2,60}?)\s+to\s+[A-Za-z]',
-      caseSensitive: false,
-    ).firstMatch(flat);
-    if (smsSender != null) {
-      final n = tryName(smsSender.group(1)?.trim());
       if (n != null) return n;
     }
 
