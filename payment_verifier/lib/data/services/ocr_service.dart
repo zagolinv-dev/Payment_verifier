@@ -513,7 +513,9 @@ class OcrService {
     if (t.contains('dashen')) return 'dashen';
     if (t.contains('bank of abyssinia') || t.contains('source account') || t.contains('the choice for all') || t.contains('abyssinia') || t.contains('abysinia') || t.contains('abysina')) return 'boa';
     if (t.contains('commercial bank of ethiopia') || t.contains('rely on') || t.contains('negid') ||
-        (t.contains('debited') && RegExp(r'\bFT', caseSensitive: false).hasMatch(text))) return 'cbe';
+        (t.contains('debited') && RegExp(r'\bFT', caseSensitive: false).hasMatch(text)) ||
+        (t.contains('transfer from') && RegExp(r'\bFT[A-Z0-9]{6,}\b', caseSensitive: false).hasMatch(text)) ||
+        (t.contains('completed') && RegExp(r'\bFT[A-Z0-9]{6,}\b', caseSensitive: false).hasMatch(text))) return 'cbe';
     if (t.contains('awash')) return 'awash';
     return null;
   }
@@ -790,6 +792,16 @@ String? extractCustomerName(String text,
   if (bank == 'cbe') {
     // Normalize newlines to spaces for single-block notification text
     final flat = text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ');
+
+    // CBE SMS format: "Completed ETB60.61 transfer From SENDER to RECEIVER-ACCT"
+    final transferFrom = RegExp(
+      r'transfer\s+from\s+([A-Za-z][A-Za-z .]{2,50}?)\s+to\s+[A-Za-z]',
+      caseSensitive: false,
+    ).firstMatch(flat);
+    if (transferFrom != null) {
+      final n = tryName(transferFrom.group(1)?.trim());
+      if (n != null) return n;
+    }
 
     // Negid SMS format: "ETB X debited from SENDER NAME for RECEIVER NAME-ETB-ACCT"
     final dbt = RegExp(

@@ -318,6 +318,8 @@ class VerificationService {
         n.contains('zemen') || n.contains('ethiotelecom')) {
       return 'telebirr';
     }
+    // Map "Commercial Bank of Ethiopia" display name
+    if (n.contains('commercial bank of ethiopia')) return 'cbe';
     return n;
   }
 
