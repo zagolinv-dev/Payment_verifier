@@ -156,8 +156,7 @@ class VerifyState {
       selectedBank != null &&
       receiptImage != null &&
       referenceCode.isNotEmpty &&
-      orderTotal > 0 &&
-      ocrCompleted;
+      orderTotal > 0;
 
   bool get isBlocked => attemptCount >= maxAttempts;
 

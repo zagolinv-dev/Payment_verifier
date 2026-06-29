@@ -388,8 +388,13 @@ class _BankAccountCard extends StatelessWidget {
 // ── Add Bank Account Modal ────────────────────────────────────────────────────
 
 class _AddBankAccountModal extends StatefulWidget {
-  const _AddBankAccountModal({required this.onSubmit, this.initial});
+  const _AddBankAccountModal({
+    required this.onSubmit,
+    this.initial,
+    this.scrollController,
+  });
   final BankAccountEntity? initial;
+  final ScrollController? scrollController;
   final Future<void> Function(Map<String, String?>) onSubmit;
 
   @override
@@ -475,6 +480,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SingleChildScrollView(
+        controller: widget.scrollController,
         child: Form(
           key: _formKey,
           child: Column(

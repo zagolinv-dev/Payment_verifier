@@ -33,6 +33,7 @@ class VerifyConfig {
   final int maxAttempts;
   final String? ocrDetectedBank;
   final int maxAgeDays;
+  final int maxAgeMinutes;
   final String? expectedCustomerName;
   final String? expectedReceiverName;
 
@@ -44,6 +45,7 @@ class VerifyConfig {
     this.maxAttempts = 3,
     this.ocrDetectedBank,
     this.maxAgeDays = 7,
+    this.maxAgeMinutes = 15,
     this.expectedCustomerName,
     this.expectedReceiverName,
   });
@@ -238,19 +240,26 @@ class VerificationService {
       failures.add('Account not yours');
     }
 
-    // 8) Date & freshness check
+    // 8) Date & freshness check — receipt must be within 15 minutes
     String dateElapsed = 'Unknown';
     String freshness = '';
     final dt = parseReceiptDate(ocr.date);
     if (dt != null) {
       dateElapsed = _elapsed(dt, now);
-      final ageDays = now.difference(dt).inDays;
-      if (ageDays > config.maxAgeDays) {
-        freshness = 'Receipt is $ageDays days old (max ${config.maxAgeDays})';
+      final diff = now.difference(dt);
+      final ageMinutes = diff.inMinutes;
+      if (diff.isNegative) {
+        // Receipt timestamp is in the future — likely a forged/future-dated receipt
+        final futureMins = diff.inMinutes.abs();
+        freshness = 'Receipt is $futureMins min in the future';
+        steps.add(VStep('Transaction date', 'Future date — $dateElapsed', StepState.fail));
+        failures.add(freshness);
+      } else if (ageMinutes > config.maxAgeMinutes) {
+        freshness = 'Receipt is ${ageMinutes}m old (max ${config.maxAgeMinutes}m)';
         steps.add(VStep('Transaction date', 'Too old — $dateElapsed', StepState.fail));
         failures.add(freshness);
       } else {
-        steps.add(VStep('Transaction date', dateElapsed, StepState.pass));
+        steps.add(VStep('Transaction date', '$dateElapsed ✓', StepState.pass));
       }
     } else {
       steps.add(VStep('Transaction date', ocr.date ?? 'Not found', StepState.fail));

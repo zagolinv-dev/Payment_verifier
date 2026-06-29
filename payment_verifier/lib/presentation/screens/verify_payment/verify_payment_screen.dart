@@ -205,14 +205,17 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
         setState(() => _selectedImage = localFile);
         debugPrint('[PickImage] state updated, path on XFile: ${_selectedImage?.path}');
 
-        // Upload to Supabase Storage for cross-device access
+        // Always set local path immediately so canVerify isn't blocked by upload
+        ref.read(verifyProvider.notifier).setReceiptImage(localPath);
+
+        // Upload to Supabase Storage for cross-device access (best-effort)
         final ds = ref.read(transactionDatasourceProvider);
         final receiptUrl = await ds.uploadReceiptImage(localPath);
         if (receiptUrl != null) {
           debugPrint('[PickImage] uploaded to storage: $receiptUrl');
           ref.read(verifyProvider.notifier).setReceiptImage(receiptUrl);
         } else {
-          debugPrint('[PickImage] upload failed, will retry at save');
+          debugPrint('[PickImage] upload failed, using local path');
         }
         final now = DateTime.now();
         final h = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
