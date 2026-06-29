@@ -102,7 +102,22 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
                           ),
                         ),
                   loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
-                  error: (e, _) => Center(child: Text('Error loading accounts', style: GoogleFonts.inter(color: textSecondary))),
+                  error: (e, _) => ListView(children: [
+                    const SizedBox(height: 80),
+                    Center(child: Column(children: [
+                      Icon(Icons.cloud_off_rounded, size: 56, color: textTertiary.withOpacity(0.4)),
+                      const SizedBox(height: 16),
+                      Text('Could not load accounts', style: GoogleFonts.outfit(fontSize: 16, color: textSecondary)),
+                      const SizedBox(height: 8),
+                      Text('Check your connection and try again', style: GoogleFonts.inter(fontSize: 13, color: textTertiary)),
+                      const SizedBox(height: 20),
+                      TextButton.icon(
+                        onPressed: () => ref.read(bankAccountNotifierProvider.notifier).reload(),
+                        icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryGreen),
+                        label: Text('Retry', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.w600)),
+                      ),
+                    ])),
+                  ]),
                 ),
               ),
             ),
@@ -115,30 +130,16 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
   void _showAddModal(BuildContext context) {
     showBlurredBottomSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) => _AddBankAccountModal(
-          scrollController: scrollController,
-          onSubmit: (data) async {
-            final success = await ref
-                .read(bankAccountNotifierProvider.notifier)
-                .createAccount(
-                  holderName: data['holderName']!,
-                  bankName: data['bankName']!,
-                  accountNumber: data['accountNumber']!,
-                  phone: data['phone'],
-                  notes: data['notes'],
-                );
-            if (success) {
-              ref.invalidate(bankAccountsProvider);
-            }
-          },
-        ),
+      builder: (_) => _AddBankAccountModal(
+        onSubmit: (data) async {
+          await ref.read(bankAccountNotifierProvider.notifier).createAccount(
+            holderName: data['holderName']!,
+            bankName: data['bankName']!,
+            accountNumber: data['accountNumber']!,
+            phone: data['phone'],
+            notes: data['notes'],
+          );
+        },
       ),
     );
   }
@@ -146,32 +147,18 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
   void _showEditModal(BuildContext context, BankAccountEntity account) {
     showBlurredBottomSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) => _AddBankAccountModal(
-          scrollController: scrollController,
-          initial: account,
-          onSubmit: (data) async {
-            final success = await ref
-                .read(bankAccountNotifierProvider.notifier)
-                .updateAccount(
-                  id: account.id,
-                  holderName: data['holderName']!,
-                  bankName: data['bankName']!,
-                  accountNumber: data['accountNumber']!,
-                  phone: data['phone'],
-                  notes: data['notes'],
-                );
-            if (success) {
-              ref.invalidate(bankAccountsProvider);
-            }
-          },
-        ),
+      builder: (_) => _AddBankAccountModal(
+        initial: account,
+        onSubmit: (data) async {
+          await ref.read(bankAccountNotifierProvider.notifier).updateAccount(
+            id: account.id,
+            holderName: data['holderName']!,
+            bankName: data['bankName']!,
+            accountNumber: data['accountNumber']!,
+            phone: data['phone'],
+            notes: data['notes'],
+          );
+        },
       ),
     );
   }
@@ -375,8 +362,7 @@ class _BankAccountCard extends StatelessWidget {
 // ── Add Bank Account Modal ────────────────────────────────────────────────────
 
 class _AddBankAccountModal extends StatefulWidget {
-  const _AddBankAccountModal({required this.scrollController, required this.onSubmit, this.initial});
-  final ScrollController scrollController;
+  const _AddBankAccountModal({required this.onSubmit, this.initial});
   final BankAccountEntity? initial;
   final Future<void> Function(Map<String, String?>) onSubmit;
 
@@ -463,7 +449,6 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SingleChildScrollView(
-        controller: widget.scrollController,
         child: Form(
           key: _formKey,
           child: Column(
@@ -523,7 +508,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                         dropdownColor: dropdownBg,
                         icon: const Icon(Icons.keyboard_arrow_down_rounded,
                             color: AppTheme.textSecondary),
-                        items: BankName.addAccountOptions
+                        items: BankName.values
                             .map((b) => DropdownMenuItem(
                                   value: b.displayName,
                                   child: Text(b.displayName,

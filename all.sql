@@ -62,6 +62,7 @@ drop policy if exists "Authenticated can create transactions" on public.transact
 create policy "Authenticated can view transactions" on public.transactions for select using (auth.role() = 'authenticated');
 create policy "Authenticated can create transactions" on public.transactions for insert with check (auth.role() = 'authenticated');
 create policy "Admin can update transactions" on public.transactions for update using (exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN'));
+create policy "Admin can delete transactions" on public.transactions for delete using (exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN'));
 
 -- 9. Recreate trigger with all profile fields
 create or replace function public.handle_new_user()

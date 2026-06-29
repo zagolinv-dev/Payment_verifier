@@ -788,13 +788,26 @@ String? extractCustomerName(String text,
 
   // ── CBE / Negid ─────────────────────────────────────────────────────────
   if (bank == 'cbe') {
+    // Normalize newlines to spaces for single-block notification text
+    final flat = text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ');
+
     // Negid SMS format: "ETB X debited from SENDER NAME for RECEIVER NAME-ETB-ACCT"
     final dbt = RegExp(
       r'debited\s+from\s+([A-Za-z][A-Za-z .]{2,50}?)\s+for\b',
       caseSensitive: false,
-    ).firstMatch(text);
+    ).firstMatch(flat);
     if (dbt != null) {
       final n = tryName(dbt.group(1)?.trim());
+      if (n != null) return n;
+    }
+
+    // Also try greedy version in case lazy stops too early
+    final dbtGreedy = RegExp(
+      r'debited\s+from\s+([A-Za-z][A-Za-z .]{5,60})\s+for\b',
+      caseSensitive: false,
+    ).firstMatch(flat);
+    if (dbtGreedy != null) {
+      final n = tryName(dbtGreedy.group(1)?.trim());
       if (n != null) return n;
     }
 
@@ -808,6 +821,16 @@ String? extractCustomerName(String text,
         final n = tryName(m.group(1)?.trim());
         if (n != null) return n;
       }
+    }
+
+    // Same pattern on the flat (single-line) version
+    final fromAcctFlat = RegExp(
+      r'from\s+(?:your\s+)?account\s*[:\-]?\s*[\d*xX\u2022\u25CF\u25AA/]+\s+([A-Za-z][A-Za-z .]{2,50}?)(?:\s+(?:for|ETB|to)\b)',
+      caseSensitive: false,
+    ).firstMatch(flat);
+    if (fromAcctFlat != null) {
+      final n = tryName(fromAcctFlat.group(1)?.trim());
+      if (n != null) return n;
     }
 
     // "From Your Account" on one line, masked account on next, name after

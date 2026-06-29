@@ -612,10 +612,29 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppTheme.error.withOpacity(0.3)),
                       ),
-                      child: Text(
-                        'This receipt has been blocked after ${state.maxAttempts} failed attempts. Scan a new receipt to try again.',
-                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.error),
-                        textAlign: TextAlign.center,
+                      child: Column(
+                        children: [
+                          Text(
+                            '${state.maxAttempts} failed attempts reached. Pick a new receipt image to try again.',
+                            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.error),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: () {
+                              ref.read(verifyProvider.notifier).reset();
+                              setState(() {
+                                _selectedImage = null;
+                                _ocrStatus = '';
+                                _amountController.clear();
+                                _referenceController.clear();
+                                _receiverAcctController.clear();
+                              });
+                            },
+                            icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryGreen, size: 18),
+                            label: Text('Reset & Try Again', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.w600, fontSize: 13)),
+                          ),
+                        ],
                       ),
                     ),
                   ),

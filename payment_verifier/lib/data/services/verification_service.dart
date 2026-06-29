@@ -340,14 +340,26 @@ class VerificationService {
   }
 
   bool _phoneMatch(String extracted, List<String> businessAccounts) {
-    final ex = extracted.replaceAll(RegExp(r'\D'), '');
-    if (ex.length < 9) return false;
-    final exTail = ex.length >= 9 ? ex.substring(ex.length - 9) : ex;
+    // Normalize a phone number to its last 9 digits (Ethiopian numbers are 9 digits after country code)
+    String norm(String raw) {
+      var d = raw.replaceAll(RegExp(r'\D'), '');
+      // Strip leading 251 (country code)
+      if (d.startsWith('251') && d.length >= 12) d = d.substring(3);
+      // Strip leading 0
+      if (d.startsWith('0') && d.length == 10) d = d.substring(1);
+      // Return last 9 digits
+      return d.length >= 9 ? d.substring(d.length - 9) : d;
+    }
+
+    final exNorm = norm(extracted);
+    if (exNorm.length < 7) return false;
+
     for (final acct in businessAccounts) {
-      final digits = acct.replaceAll(RegExp(r'\D'), '');
-      if (digits.isEmpty) continue;
-      final tail = digits.length >= 9 ? digits.substring(digits.length - 9) : digits;
-      if (exTail == tail || ex.endsWith(tail) || digits.endsWith(exTail)) return true;
+      final acctNorm = norm(acct);
+      if (acctNorm.isEmpty) continue;
+      if (exNorm == acctNorm) return true;
+      // Partial match — one contains the other
+      if (exNorm.endsWith(acctNorm) || acctNorm.endsWith(exNorm)) return true;
     }
     return false;
   }

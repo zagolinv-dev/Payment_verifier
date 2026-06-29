@@ -104,7 +104,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final isAdmin = ref.watch(isAdminProvider);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
-    final isAdmin = ref.watch(isAdminProvider);
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
     final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
@@ -258,9 +257,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           itemCount: txs.length,
                           itemBuilder: (ctx, i) {
                             final tx = txs[i];
-                             onDelete: isAdmin
-                                ? () => _confirmDeleteTransaction(context, ref, txs[i])
-                                : null,
                             final tile = TransactionListItem(transaction: tx);
                             if (!isAdmin) return tile;
                             return Dismissible(

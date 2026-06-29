@@ -313,7 +313,10 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     final tip = amt > state.orderTotal ? amt - state.orderTotal : 0.0;
     state = state.copyWith(amount: amt, tip: tip);
   }
-  void setReceiptImage(String? path) => state = state.copyWith(receiptImage: path);
+  void setReceiptImage(String? path) {
+    // Reset attempt count when a new image is picked so users aren't permanently blocked
+    state = state.copyWith(receiptImage: path, attemptCount: 0, ocrCompleted: false);
+  }
   void setOcrCompleted() => state = state.copyWith(ocrCompleted: true);
   void setAttemptCount(int n) => state = state.copyWith(attemptCount: n);
   void setVerifyResult(VerifyResult? r) => state = state.copyWith(
