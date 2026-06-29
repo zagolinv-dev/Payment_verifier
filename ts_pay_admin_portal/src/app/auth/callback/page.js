@@ -29,7 +29,7 @@ function CallbackHandler() {
   }, [router, searchParams]);
 
   return (
-    <div className="min-h-screen bg-[#080E1A] flex flex-col items-center justify-center gap-4 p-4">
+    <div className="min-h-screen bg-zinc-50 flex flex-col items-center justify-center gap-4 p-4">
       <img src="/logo.png" alt="T's Verify" className="w-14 h-14 object-contain animate-pulse" />
       <div className="flex gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "0ms" }} />
@@ -44,7 +44,7 @@ function CallbackHandler() {
 export default function AuthCallbackPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[#080E1A] flex items-center justify-center">
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <img src="/logo.png" alt="T's Verify" className="w-14 h-14 object-contain animate-pulse" />
           <div className="flex gap-1.5">

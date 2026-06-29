@@ -46,12 +46,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
+  const [darkMode, setDarkMode] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
+    const stored = JSON.parse(localStorage.getItem("adminDarkMode") ?? "false");
+    setDarkMode(stored);
     const t = setTimeout(() => setSplashDone(true), 2000);
     return () => clearTimeout(t);
   }, []);

@@ -34,7 +34,7 @@ export default function DashboardLayout({ children, darkMode, setDarkMode }) {
 
   if (checking) {
     return (
-      <div className="min-h-screen bg-[#080E1A] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
         <div className="flex flex-col items-center gap-4">
           <img src="/logo.png" alt="T's Verify" className="w-14 h-14 object-contain animate-pulse" />
           <div className="flex gap-1.5">
