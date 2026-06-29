@@ -227,11 +227,30 @@ class SupabaseTransactionDatasource {
       await _client.storage.from('receipts').upload(
         storagePath,
         File(localPath),
-        fileOptions: const FileOptions(contentType: 'image/jpeg'),
+        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false),
       );
-      return _client.storage.from('receipts').getPublicUrl(storagePath);
+      // Try public URL first; if the bucket is private this will still work
+      // as long as the bucket has public read enabled.
+      // We embed the storagePath as a fragment so we can regenerate a signed
+      // URL later without storing a separate column.
+      final publicUrl = _client.storage.from('receipts').getPublicUrl(storagePath);
+      // Append storagePath as a custom query param so the widget can retry
+      return '$publicUrl#path=$storagePath';
     } catch (e) {
       debugPrint('[uploadReceiptImage] failed: $e');
+      return null;
+    }
+  }
+
+  /// Generates a fresh 1-year signed URL for a receipt.
+  /// [storagePath] is the path inside the "receipts" bucket, e.g. "userId/receipt_123.jpg"
+  Future<String?> getSignedReceiptUrl(String storagePath) async {
+    try {
+      return await _client.storage
+          .from('receipts')
+          .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
+    } catch (e) {
+      debugPrint('[getSignedReceiptUrl] failed: $e');
       return null;
     }
   }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:payment_verifier/core/utils/formatters.dart';
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 import 'package:payment_verifier/core/constants/app_constants.dart';
@@ -15,35 +16,51 @@ class ReceiptPdfExport {
     final pdf = pw.Document();
 
     // Pre-fetch network image bytes for PDF embedding
+    // Falls back to a signed URL if the public URL returns a non-200 status.
     final imageBytes = <String, Uint8List>{};
+    final client = HttpClient();
     for (final txs in grouped.values) {
       for (final tx in txs) {
         final img = tx.receiptImage;
         if (img == null) continue;
         if (img.startsWith('http://') || img.startsWith('https://')) {
+          // Strip fragment (#path=...) before fetching
+          final fetchUrl = img.contains('#') ? img.substring(0, img.indexOf('#')) : img;
           try {
-            final client = HttpClient();
-            final request = await client.getUrl(Uri.parse(img));
+            final request = await client.getUrl(Uri.parse(fetchUrl));
             final response = await request.close();
             if (response.statusCode == 200) {
               final bytes = <int>[];
-              await for (final chunk in response) {
-                bytes.addAll(chunk);
-              }
+              await for (final chunk in response) bytes.addAll(chunk);
               imageBytes[tx.id] = Uint8List.fromList(bytes);
+            } else {
+              // Non-200: try a signed URL using the embedded storage path
+              final storagePath = _extractStoragePath(img);
+              if (storagePath != null) {
+                try {
+                  final signed = await Supabase.instance.client.storage
+                      .from('receipts')
+                      .createSignedUrl(storagePath, 3600);
+                  final req2 = await client.getUrl(Uri.parse(signed));
+                  final res2 = await req2.close();
+                  if (res2.statusCode == 200) {
+                    final bytes = <int>[];
+                    await for (final chunk in res2) bytes.addAll(chunk);
+                    imageBytes[tx.id] = Uint8List.fromList(bytes);
+                  }
+                } catch (_) {}
+              }
             }
-            client.close();
           } catch (_) {}
         } else {
           try {
             final file = File(img);
-            if (file.existsSync()) {
-              imageBytes[tx.id] = file.readAsBytesSync();
-            }
+            if (file.existsSync()) imageBytes[tx.id] = file.readAsBytesSync();
           } catch (_) {}
         }
       }
     }
+    client.close();
 
     pdf.addPage(
       pw.MultiPage(
@@ -372,6 +389,19 @@ class ReceiptPdfExport {
         style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800),
       ),
     );
+  }
+
+  /// Extracts the Supabase Storage path from a receipt URL.
+  /// Handles both the "#path=..." fragment we embed and the URL path itself.
+  static String? _extractStoragePath(String url) {
+    // Check embedded fragment: "#path=userId/receipt_123.jpg"
+    final uri = Uri.tryParse(url);
+    if (uri != null && uri.fragment.startsWith('path=')) {
+      return uri.fragment.substring(5);
+    }
+    // Fallback: parse from URL path ".../receipts/userId/receipt_123.jpg"
+    final match = RegExp(r'/receipts/(.+?)(?:\?|$)').firstMatch(url);
+    return match?.group(1);
   }
 
   static Map<String, List<TransactionEntity>> _groupByScanner(

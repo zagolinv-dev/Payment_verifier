@@ -1,13 +1,14 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/core/utils/formatters.dart';
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
+import 'package:payment_verifier/presentation/widgets/receipt_image_widget.dart';
 import 'package:payment_verifier/presentation/widgets/status_chip.dart';
 import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
 
-class TransactionListItem extends StatelessWidget {
+class TransactionListItem extends ConsumerWidget {
   const TransactionListItem({
     super.key,
     required this.transaction,
@@ -20,7 +21,7 @@ class TransactionListItem extends StatelessWidget {
   final VoidCallback? onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? AppTheme.bgCard : AppTheme.lightCard;
     final border = isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle;
@@ -68,8 +69,7 @@ class TransactionListItem extends StatelessWidget {
                     children: [
                       if (transaction.receiptImage != null) ...[
                         GestureDetector(
-                          onTap: () => _showReceipt(context),
-                          child: Container(
+                          onTap: () => _showReceipt(context),                          child: Container(
                             width: 28, height: 28,
                             margin: const EdgeInsets.only(right: 6),
                             decoration: BoxDecoration(
@@ -149,81 +149,8 @@ class TransactionListItem extends StatelessWidget {
     );
   }
 
-  Widget _buildReceiptImage(String path) {
-    final isUrl = path.startsWith('http://') || path.startsWith('https://');
-    if (isUrl) {
-      return Image.network(
-        path,
-        fit: BoxFit.contain,
-        width: double.infinity,
-        height: 400,
-        errorBuilder: (_, error, __) {
-          debugPrint('[TransactionListItem] Image.network error: $error');
-          return _brokenImage();
-        },
-        loadingBuilder: (_, child, progress) {
-          if (progress == null) return child;
-          return Container(
-            height: 200,
-            color: AppTheme.bgCard,
-            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          );
-        },
-      );
-    }
-    return Image.file(
-      File(path),
-      fit: BoxFit.contain,
-      width: double.infinity,
-      height: 400,
-      errorBuilder: (_, error, __) {
-        debugPrint('[TransactionListItem] Image.file error: $error');
-        return _brokenImage();
-      },
-    );
-  }
-
-  Widget _brokenImage() {
-    return Container(
-      height: 200,
-      color: AppTheme.bgCard,
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.broken_image_rounded, color: AppTheme.textTertiary, size: 48),
-            const SizedBox(height: 8),
-            Text('Receipt image no longer available', style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showReceipt(BuildContext context) async {
+  void _showReceipt(BuildContext context) {
     if (transaction.receiptImage == null) return;
-    final path = transaction.receiptImage!;
-
-    final isUrl = path.startsWith('http://') || path.startsWith('https://');
-    if (!isUrl) {
-      final file = File(path);
-      if (!await file.exists()) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Receipt image was saved locally and is no longer available.'),
-            backgroundColor: AppTheme.error.withOpacity(0.9),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-        return;
-      }
-    }
-
-    final imageWidget = _buildReceiptImage(path);
-
-    if (!context.mounted) return;
     showBlurredDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -233,7 +160,7 @@ class TransactionListItem extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: imageWidget,
+              child: ReceiptImageWidget(imagePath: transaction.receiptImage!, height: 400),
             ),
             const SizedBox(height: 16),
             GestureDetector(
