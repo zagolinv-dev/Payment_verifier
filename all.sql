@@ -23,13 +23,13 @@ drop policy if exists "Admins can delete profiles" on public.profiles;
 -- 3. Clean profile RLS
 create policy "Users can view all profiles" on public.profiles for select using (auth.role() = 'authenticated');
 create policy "Users can update own profile" on public.profiles for update using (auth.uid() = id);
-create policy "Admins can update any profile" on public.profiles for update using (exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN'));
-create policy "Admins can delete profiles" on public.profiles for delete using (exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN'));
+create policy "Admins can update any profile" on public.profiles for update using (exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN')));
+create policy "Admins can delete profiles" on public.profiles for delete using (exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN')));
 
 -- 3c. Allow anyone to submit a pending application
 create policy "Anyone can submit pending application" on public.profiles
   for insert to anon, authenticated
-  with check (status = 'PENDING' and role = 'ADMIN');
+  with check (status = 'PENDING' and role in ('ADMIN', 'SUPER_ADMIN'));
 
 -- 4. Drop ALL old notification RLS policies
 drop policy if exists "Admin can read notifications" on public.notifications;
@@ -61,8 +61,8 @@ drop policy if exists "Authenticated can create transactions" on public.transact
 -- 8. Clean transaction RLS
 create policy "Authenticated can view transactions" on public.transactions for select using (auth.role() = 'authenticated');
 create policy "Authenticated can create transactions" on public.transactions for insert with check (auth.role() = 'authenticated');
-create policy "Admin can update transactions" on public.transactions for update using (exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN'));
-create policy "Admin can delete transactions" on public.transactions for delete using (exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN'));
+create policy "Admin can update transactions" on public.transactions for update using (exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN')));
+create policy "Admin can delete transactions" on public.transactions for delete using (exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN')));
 
 -- 9. Recreate trigger with all profile fields
 create or replace function public.handle_new_user()
@@ -76,7 +76,7 @@ begin
     new.email,
     new.raw_user_meta_data->>'full_name',
     v_role,
-    case when v_role = 'ADMIN' then 'PENDING' else 'APPROVED' end,
+    case when v_role in ('ADMIN', 'SUPER_ADMIN') then 'PENDING' else 'APPROVED' end,
     new.raw_user_meta_data->>'phone',
     new.raw_user_meta_data->>'owner_name',
     new.raw_user_meta_data->>'address',
@@ -100,8 +100,8 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- 10. Set existing admin profiles
-update public.profiles set status = 'PENDING' where role = 'ADMIN' and (status is null or status = 'APPROVED');
-update public.profiles set role = 'ADMIN' where email = 'zagolinv@gmail.com' and role is distinct from 'ADMIN';
+update public.profiles set status = 'PENDING' where role in ('ADMIN', 'SUPER_ADMIN') and (status is null or status = 'APPROVED');
+update public.profiles set role in ('ADMIN', 'SUPER_ADMIN') where email = 'zagolinv@gmail.com' and role is distinct from 'ADMIN';
 
 -- ===== WAITER PASSWORD RESET REQUESTS =====
 

@@ -20,7 +20,7 @@ CREATE POLICY "Admins can view all profiles"
   ON profiles FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN'
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('ADMIN', 'SUPER_ADMIN')
     )
   );
 
@@ -32,7 +32,7 @@ CREATE POLICY "Admins can update any profile"
   ON profiles FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN'
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('ADMIN', 'SUPER_ADMIN')
     )
   );
 
@@ -40,7 +40,7 @@ CREATE POLICY "Admins can delete profiles"
   ON profiles FOR DELETE
   USING (
     EXISTS (
-      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN'
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('ADMIN', 'SUPER_ADMIN')
     )
   );
 
@@ -94,7 +94,7 @@ CREATE POLICY "Authenticated users can insert transactions"
 CREATE POLICY "Admin can delete transactions"
   ON transactions FOR DELETE
   USING (EXISTS (
-    SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'ADMIN'
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('ADMIN', 'SUPER_ADMIN')
   ));
 
 -- ── Bank Accounts ────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ BEGIN
     'Password Reset Requested',
     NEW.name || ' (' || NEW.email || ') requested a password reset.'
   FROM profiles p
-  WHERE p.role = 'ADMIN';
+  WHERE p.role IN ('ADMIN', 'SUPER_ADMIN');
   RETURN NEW;
 END;
 $$;

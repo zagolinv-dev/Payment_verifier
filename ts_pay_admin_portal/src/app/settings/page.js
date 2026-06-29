@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { CheckCircleIcon, XCircleIcon, EyeIcon, EyeOffIcon, UserIcon, UserPlusIcon, LockIcon } from "@/components/Icons";
+import { CheckCircleIcon, XCircleIcon, EyeIcon, EyeOffIcon, UserIcon, LockIcon } from "@/components/Icons";
 import DashboardLayout from "../dashboard-layout";
 
 export default function SettingsPage() {
@@ -41,7 +41,6 @@ export default function SettingsPage() {
         <div className="flex gap-2 flex-wrap">
           {[
             { key: "profile", label: "My Profile", icon: UserIcon },
-            { key: "admin", label: "Add Superadmin", icon: UserPlusIcon },
             { key: "password", label: "Change Password", icon: LockIcon },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -60,7 +59,7 @@ export default function SettingsPage() {
         </div>
 
         {activeSection === "profile" && <ProfileSection darkMode={darkMode} showToast={showToast} />}
-        {activeSection === "admin" && <AddSuperadminSection darkMode={darkMode} showToast={showToast} />}
+
         {activeSection === "password" && <ChangePasswordSection darkMode={darkMode} showToast={showToast} />}
       </div>
     </DashboardLayout>
@@ -149,20 +148,6 @@ function ProfileSection({ darkMode, showToast }) {
             <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Full Name</div>
             <div className={`font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>{profile?.full_name || "Super Admin"}</div>
           </div>
-          <div>
-            <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Role</div>
-            <div className="font-bold">
-              <span className="bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border border-emerald-500/20">
-                {profile?.role || "ADMIN"}
-              </span>
-            </div>
-          </div>
-          <div>
-            <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Joined</div>
-            <div className={`font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>
-              {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "N/A"}
-            </div>
-          </div>
         </div>
 
         <div className={`pt-5 border-t ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
@@ -192,138 +177,6 @@ function ProfileSection({ darkMode, showToast }) {
             </button>
           </form>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function AddSuperadminSection({ darkMode, showToast }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [creating, setCreating] = useState(false);
-
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    if (!name.trim() || !email.trim() || !password) { showToast("All fields are required.", "error"); return; }
-    if (password !== confirmPassword) { showToast("Passwords do not match.", "error"); return; }
-    if (password.length < 6) { showToast("Password must be at least 6 characters.", "error"); return; }
-    setCreating(true);
-    try {
-      const res = await fetch("/api/create-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, fullName: name, role: "ADMIN" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      showToast(`Superadmin "${name}" created successfully!`, "success");
-      setName(""); setEmail(""); setPassword(""); setConfirmPassword("");
-    } catch (err) { showToast(err.message, "error"); }
-    finally { setCreating(false); }
-  };
-
-  return (
-    <div className={`relative overflow-hidden rounded-2xl border transition-all ${darkMode ? "bg-[#0F1626]/80 backdrop-blur-xl border-white/[0.06]" : "bg-white/80 backdrop-blur-xl border-black/5 shadow-sm"}`}>
-      <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none ${darkMode ? "bg-emerald-500/5" : "bg-emerald-500/3"}`} />
-      <div className="p-6 sm:p-8">
-        <div className={`relative flex items-center gap-3 mb-6 pb-5 border-b ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"}`}>
-            <UserPlusIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>Add Superadmin</h3>
-            <p className={`text-[10px] ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
-              Grant full admin access to another user
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleCreate} className="relative space-y-4">
-          <div>
-            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Full Name</label>
-            <input
-              type="text" value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl border text-sm outline-none transition-all ${
-                darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
-              }`}
-              placeholder="e.g. John Doe"
-              required
-            />
-          </div>
-          <div>
-            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Email Address</label>
-            <input
-              type="email" value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-3 rounded-xl border text-sm outline-none transition-all ${
-                darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
-              }`}
-              placeholder="admin@example.com"
-              required
-            />
-          </div>
-          <div>
-            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Password</label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"} value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={`w-full px-4 py-3 pr-11 rounded-xl border text-sm outline-none transition-all ${
-                  darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
-                }`}
-                placeholder="Min. 6 characters"
-                required minLength={6}
-              />
-              <button
-                type="button" onClick={() => setShowPassword(!showPassword)}
-                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${
-                  darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"
-                }`} tabIndex={-1}
-              >
-                {showPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className={`text-xs font-bold block mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Confirm Password</label>
-            <div className="relative">
-              <input
-                type={showConfirm ? "text" : "password"} value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 pr-11 rounded-xl border text-sm outline-none transition-all ${
-                  darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"
-                }`}
-                placeholder="Repeat password"
-                required minLength={6}
-              />
-              <button
-                type="button" onClick={() => setShowConfirm(!showConfirm)}
-                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${
-                  darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"
-                }`} tabIndex={-1}
-              >
-                {showConfirm ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          <button
-            type="submit"
-            disabled={creating}
-            className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-50 transition-all cursor-pointer text-xs"
-          >
-            {creating ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-zinc-950/30 border-t-zinc-950 rounded-full animate-spin" />
-                Creating...
-              </span>
-            ) : "Create Superadmin"}
-          </button>
-        </form>
       </div>
     </div>
   );

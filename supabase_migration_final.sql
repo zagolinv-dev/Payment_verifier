@@ -14,7 +14,7 @@ create table if not exists public.profiles (
   email text,
   full_name text,
   avatar_url text,
-  role text check (role in ('ADMIN', 'WAITRESS')) default 'WAITRESS',
+  role text check (role in ('ADMIN', 'WAITRESS', 'SUPER_ADMIN')) default 'WAITRESS',
   status text check (status in ('PENDING', 'APPROVED', 'REJECTED')) default 'APPROVED',
   created_at timestamptz default now() not null
 );
@@ -181,7 +181,7 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where policyname = 'Admins can update any profile' and tablename = 'profiles') then
     create policy "Admins can update any profile" on public.profiles for update using (
-      exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN')
+      exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN'))
     );
   end if;
 end $$;
@@ -189,7 +189,7 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where policyname = 'Admins can delete profiles' and tablename = 'profiles') then
     create policy "Admins can delete profiles" on public.profiles for delete using (
-      exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN')
+      exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN'))
     );
   end if;
 end $$;
@@ -212,7 +212,7 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where policyname = 'Admin can update transactions' and tablename = 'transactions') then
     create policy "Admin can update transactions" on public.transactions for update using (
-      exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN')
+      exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN'))
     );
   end if;
 end $$;
@@ -259,7 +259,7 @@ alter table public.merchants enable row level security;
 do $$ begin
   if not exists (select 1 from pg_policies where policyname = 'Admins can manage merchants' and tablename = 'merchants') then
     create policy "Admins can manage merchants" on public.merchants for all using (
-      exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN')
+      exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN'))
     );
   end if;
 end $$;
@@ -270,7 +270,7 @@ alter table public.platform_settings enable row level security;
 do $$ begin
   if not exists (select 1 from pg_policies where policyname = 'Admins can manage platform settings' and tablename = 'platform_settings') then
     create policy "Admins can manage platform settings" on public.platform_settings for all using (
-      exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN')
+      exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN'))
     );
   end if;
 end $$;
@@ -281,7 +281,7 @@ alter table public.audit_logs enable row level security;
 do $$ begin
   if not exists (select 1 from pg_policies where policyname = 'Admins can view audit logs' and tablename = 'audit_logs') then
     create policy "Admins can view audit logs" on public.audit_logs for select using (
-      exists (select 1 from public.profiles where id = auth.uid() and role = 'ADMIN')
+      exists (select 1 from public.profiles where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN'))
     );
   end if;
 end $$;

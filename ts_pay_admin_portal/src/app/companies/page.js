@@ -27,19 +27,8 @@ export default function CompaniesPage() {
         .eq("role", "ADMIN")
         .order("created_at", { ascending: false });
 
-      const { data: txData } = await supabase
-        .from("transactions")
-        .select("verified_by, amount");
-
-      const volumeMap = {};
-      (txData || []).forEach((t) => {
-        if (t.verified_by)
-          volumeMap[t.verified_by] = (volumeMap[t.verified_by] || 0) + (Number(t.amount) || 0);
-      });
-
       setCompanies((profiles || []).map((m) => ({
         ...m,
-        volume: volumeMap[m.id] || 0,
         status: m.status === "APPROVED" || !m.status ? "ACTIVE" : "SUSPENDED",
       })));
     } catch (err) { console.error("Failed to load companies:", err); }
@@ -140,7 +129,6 @@ export default function CompaniesPage() {
                 <tr className={`border-b text-zinc-400 font-bold uppercase tracking-wider ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
                   <th className="p-4 sm:p-5">Company</th>
                   <th className="p-4 sm:p-5">Email</th>
-                  <th className="p-4 sm:p-5">Volume</th>
                   <th className="p-4 sm:p-5">Status</th>
                   <th className="p-4 sm:p-5 text-right">Actions</th>
                 </tr>
@@ -148,7 +136,7 @@ export default function CompaniesPage() {
               <tbody className={`divide-y font-medium ${darkMode ? "divide-white/[0.04] text-zinc-300" : "divide-black/5 text-zinc-700"}`}>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
+                    <td colSpan={4} className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
                       No companies found matching your search.
                     </td>
                   </tr>
@@ -167,9 +155,6 @@ export default function CompaniesPage() {
                       </div>
                     </td>
                     <td className="p-4 sm:p-5">{company.email || company.phone || "—"}</td>
-                    <td className={`p-4 sm:p-5 font-bold ${darkMode ? "text-zinc-300" : "text-zinc-700"}`}>
-                      ETB {Number(company.volume || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
                     <td className="p-4 sm:p-5">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
                         company.status === "ACTIVE"

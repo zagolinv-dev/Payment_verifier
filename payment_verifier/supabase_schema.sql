@@ -9,7 +9,7 @@ create table if not exists public.profiles (
   email text,
   full_name text,
   avatar_url text,
-  role text check (role in ('ADMIN', 'WAITRESS')) default 'WAITRESS',
+  role text check (role in ('ADMIN', 'WAITRESS', 'SUPER_ADMIN')) default 'WAITRESS',
   created_at timestamptz default now() not null
 );
 
@@ -95,7 +95,7 @@ create policy "Admin can update transactions" on public.transactions
   for update using (
     exists (
       select 1 from public.profiles
-      where id = auth.uid() and role = 'ADMIN'
+      where id = auth.uid() and role in ('ADMIN', 'SUPER_ADMIN')
     )
   );
 

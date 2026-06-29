@@ -17,9 +17,20 @@ export default function UsersPage() {
     email: "", password: "", fullName: "", role: "WAITRESS",
     phone: "", ownerName: "", address: "", description: "",
   });
+  const [companies, setCompanies] = useState([]);
   const [toast, setToast] = useState({ message: "", type: "info" });
 
   useEffect(() => { loadUsers(); }, []);
+
+  const loadCompanies = async () => {
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, owner_name")
+        .eq("role", "ADMIN");
+      setCompanies(data || []);
+    } catch (err) { console.error("Failed to load companies:", err); }
+  };
 
   const showToast = (msg, type = "success") => {
     setToast({ message: msg, type });
@@ -28,7 +39,11 @@ export default function UsersPage() {
 
   const loadUsers = async () => {
     try {
-      const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .neq("role", "SUPER_ADMIN")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       setUsers(data || []);
     } catch (err) { console.error("Failed to load users:", err); }
@@ -103,7 +118,7 @@ export default function UsersPage() {
             <p className={`text-xs mt-1 ${darkMode ? "text-zinc-500" : "text-zinc-500"}`}>Manage all platform users and their roles</p>
           </div>
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => { loadCompanies(); setShowAddModal(true); }}
             className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold text-xs shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 transition-all cursor-pointer"
           >
             + Add User
@@ -154,6 +169,7 @@ export default function UsersPage() {
                 <tr className={`border-b text-zinc-400 font-bold uppercase tracking-wider ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
                   <th className="p-4 sm:p-5">Name</th>
                   <th className="p-4 sm:p-5">Email</th>
+                  <th className="p-4 sm:p-5">Company</th>
                   <th className="p-4 sm:p-5">Role</th>
                   <th className="p-4 sm:p-5">Joined</th>
                   <th className="p-4 sm:p-5 text-right">Actions</th>
@@ -162,7 +178,7 @@ export default function UsersPage() {
               <tbody className={`divide-y font-medium ${darkMode ? "divide-white/[0.04] text-zinc-300" : "divide-black/5 text-zinc-700"}`}>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>No users found.</td>
+                    <td colSpan={6} className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>No users found.</td>
                   </tr>
                 ) : filtered.map((user) => (
                   <tr key={user.id} className={`transition-colors ${darkMode ? "hover:bg-white/[0.02]" : "hover:bg-zinc-50"}`}>
@@ -179,6 +195,9 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td className="p-4 sm:p-5">{user.email}</td>
+                    <td className={`p-4 sm:p-5 ${darkMode ? "text-zinc-300" : "text-zinc-600"}`}>
+                      {user.owner_name || (user.role === "WAITRESS" ? "—" : user.full_name || "—")}
+                    </td>
                     <td className="p-4 sm:p-5">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
                         user.role === "ADMIN"
@@ -302,6 +321,19 @@ export default function UsersPage() {
                       </div>
                     </div>
                   </>
+                )}
+
+                {newUser.role === "WAITRESS" && companies.length > 0 && (
+                  <div>
+                    <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Assign to Company</label>
+                    <select value={newUser.ownerName} onChange={(e) => setNewUser({ ...newUser, ownerName: e.target.value })}
+                      className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}>
+                      <option value="">Select a company...</option>
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.owner_name || c.full_name}>{c.owner_name || c.full_name}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
 
                 <div className="flex justify-end gap-3 pt-2">
