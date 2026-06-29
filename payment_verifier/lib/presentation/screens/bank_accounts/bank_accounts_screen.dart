@@ -388,7 +388,8 @@ class _BankAccountCard extends StatelessWidget {
 // ── Add Bank Account Modal ────────────────────────────────────────────────────
 
 class _AddBankAccountModal extends StatefulWidget {
-  const _AddBankAccountModal({required this.onSubmit, this.initial});
+  const _AddBankAccountModal({required this.scrollController, required this.onSubmit, this.initial});
+  final ScrollController scrollController;
   final BankAccountEntity? initial;
   final Future<void> Function(Map<String, String?>) onSubmit;
 
@@ -409,20 +410,26 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
   void initState() {
     super.initState();
     final initial = widget.initial;
-    final isTelebirr = initial?.bankName == 'Telebirr';
+    String? mappedBank;
+    if (initial?.bankName != null) {
+      final match = BankName.addAccountOptions.firstWhere(
+        (b) => b.displayName == initial!.bankName || b.shortName == initial.bankName,
+        orElse: () => BankName.addAccountOptions.first,
+      );
+      mappedBank = match.shortName;
+    }
+    final isTelebirr = mappedBank == 'Telebirr';
     _holderController = TextEditingController(text: initial?.holderName ?? '');
-    // For Telebirr accounts, accountNumber IS the phone — don't put it in the account field
     _accountController = TextEditingController(
       text: isTelebirr ? '' : (initial?.accountNumber ?? ''),
     );
-    // For Telebirr, pre-populate phone from accountNumber if phone field is empty
     _phoneController = TextEditingController(
       text: initial?.phone?.isNotEmpty == true
           ? initial!.phone!
           : (isTelebirr ? (initial?.accountNumber ?? '') : ''),
     );
     _notesController = TextEditingController(text: initial?.notes ?? '');
-    _selectedBank = initial?.bankName;
+    _selectedBank = mappedBank;
   }
 
   @override
@@ -534,10 +541,10 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                         dropdownColor: dropdownBg,
                         icon: const Icon(Icons.keyboard_arrow_down_rounded,
                             color: AppTheme.textSecondary),
-                        items: BankName.values
+                        items: BankName.addAccountOptions
                             .map((b) => DropdownMenuItem(
-                                  value: b.displayName,
-                                  child: Text(b.displayName,
+                                  value: b.shortName,
+                                  child: Text(b.shortName,
                                       style: GoogleFonts.inter(
                                           color: textPrimary,
                                           fontSize: 14)),
