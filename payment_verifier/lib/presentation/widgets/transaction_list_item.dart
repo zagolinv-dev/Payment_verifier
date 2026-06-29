@@ -12,10 +12,12 @@ class TransactionListItem extends StatelessWidget {
     super.key,
     required this.transaction,
     this.onTap,
+    this.onDelete,
   });
 
   final TransactionEntity transaction;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -125,6 +127,20 @@ class TransactionListItem extends StatelessWidget {
                     '+${AppFormatters.formatETB(transaction.tip)} tip',
                     style: GoogleFonts.inter(fontSize: 11, color: AppTheme.accentGold),
                   ),
+                if (onDelete != null) ...[
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: onDelete,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.error.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 16),
+                    ),
+                  ),
+                ],
               ],
             ),
           ],

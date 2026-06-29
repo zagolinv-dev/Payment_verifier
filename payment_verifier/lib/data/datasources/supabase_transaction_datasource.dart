@@ -208,73 +208,62 @@ class SupabaseTransactionDatasource {
   }
 
   Future<void> clearAllTransactions() async {
+    int beforeCount = 0;
+    try {
+      final rows = await _client.from(AppConstants.transactionsTable).select('id');
+      beforeCount = (rows as List).length;
+    } catch (_) {}
+
+    if (beforeCount == 0) return;
+
     // 1) Try the SECURITY DEFINER RPC first (bypasses RLS entirely).
-    //    Requires this SQL run once in Supabase SQL Editor:
-    //      CREATE OR REPLACE FUNCTION clear_all_data()
-    //      RETURNS void LANGUAGE sql SECURITY DEFINER
-    //      AS $$ DELETE FROM transactions; DELETE FROM notifications; $$;
     try {
       await _client.rpc('clear_all_data');
-      print('[clearAll] RPC succeeded');
-      return;
     } catch (e) {
       print('[clearAll] RPC failed – will try per-ID deletes: $e');
-    }
-
-    // 2) Fallback: fetch visible IDs and delete each one by primary key.
-    //    This works when an RLS DELETE policy exists (e.g. auth.uid() = user_id).
-    final uid = _client.auth.currentUser?.id;
-
-    // ── Transactions ────────────────────────────────────────────────────
-    try {
       final rows = await _client
           .from(AppConstants.transactionsTable)
           .select('id');
       final ids = (rows as List).map((r) => r['id'] as String).toList();
+      var deleted = 0;
+      Object? lastError;
       for (final id in ids) {
         try {
           await _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+          deleted++;
         } catch (e) {
+          lastError = e;
           print('[clearAll] skip tx $id: $e');
         }
       }
-      print('[clearAll] deleted ${ids.length} transactions');
-    } catch (e) {
-      print('[clearAll] failed to list transactions: $e');
-      if (uid != null) {
-        try {
-          await _client
-              .from(AppConstants.transactionsTable)
-              .delete()
-              .eq('verified_by', uid);
-        } catch (_) {}
+      if (deleted == 0 && lastError != null) {
+        throw Exception('Delete blocked by database policy: $lastError');
       }
     }
 
-    // ── Notifications ───────────────────────────────────────────────────
+    // Verify rows were actually removed.
+    final remaining = await _client.from(AppConstants.transactionsTable).select('id');
+    final afterCount = (remaining as List).length;
+    if (afterCount > 0) {
+      throw Exception(
+        'Only ${beforeCount - afterCount} of $beforeCount transactions were deleted. '
+        'Run supabase_fix_transaction_delete.sql in Supabase SQL Editor.',
+      );
+    }
+
+    // Best-effort notification cleanup.
     try {
-      final rows = await _client
-          .from(AppConstants.notificationsTable)
-          .select('id');
-      final ids = (rows as List).map((r) => r['id'] as String).toList();
-      for (final id in ids) {
-        try {
-          await _client.from(AppConstants.notificationsTable).delete().eq('id', id);
-        } catch (e) {
-          print('[clearAll] skip notification $id: $e');
-        }
-      }
-      print('[clearAll] deleted ${ids.length} notifications');
-    } catch (e) {
-      print('[clearAll] failed to list notifications: $e');
-      if (uid != null) {
+      final notifRows = await _client.from(AppConstants.notificationsTable).select('id');
+      for (final row in notifRows as List) {
         try {
           await _client
               .from(AppConstants.notificationsTable)
               .delete()
-              .eq('user_id', uid);
+              .eq('id', row['id'] as String);
         } catch (_) {}
       }
+    } catch (e) {
+      print('[clearAll] notification cleanup: $e');
     }
   }
 }

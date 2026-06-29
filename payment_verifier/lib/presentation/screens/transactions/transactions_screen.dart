@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
+import 'package:payment_verifier/core/utils/formatters.dart';
 import 'package:payment_verifier/core/utils/pdf_export.dart';
+import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/user_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
@@ -99,6 +101,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final filters = ref.watch(transactionFiltersProvider);
     final txAsync = ref.watch(transactionsProvider);
     final notifier = ref.read(transactionFiltersProvider.notifier);
+    final isAdmin = ref.watch(isAdminProvider);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
     final isAdmin = ref.watch(isAdminProvider);
@@ -240,6 +243,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 backgroundColor: card,
                 onRefresh: () async => ref.invalidate(transactionsProvider),
                 child: txAsync.when(
+                  skipLoadingOnReload: true,
                   data: (txs) => txs.isEmpty
                       ? ListView(children: [
                           const SizedBox(height: 80),
@@ -254,6 +258,9 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           itemCount: txs.length,
                           itemBuilder: (ctx, i) {
                             final tx = txs[i];
+                             onDelete: isAdmin
+                                ? () => _confirmDeleteTransaction(context, ref, txs[i])
+                                : null,
                             final tile = TransactionListItem(transaction: tx);
                             if (!isAdmin) return tile;
                             return Dismissible(
@@ -302,6 +309,69 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteTransaction(
+    BuildContext context,
+    WidgetRef ref,
+    TransactionEntity tx,
+  ) async {
+    final isDark = ref.read(themeProvider) == ThemeMode.dark;
+    final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
+    final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: card,
+        title: Text('Delete Transaction?', style: GoogleFonts.outfit(color: textPrimary)),
+        content: Text(
+          'Remove ${tx.referenceCode} (${AppFormatters.formatETB(tx.amount)})? This cannot be undone.',
+          style: GoogleFonts.inter(color: textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error, foregroundColor: Colors.white),
+            child: Text('Delete', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(transactionRepositoryProvider).deleteTransaction(tx.id);
+      ref.invalidate(transactionsProvider);
+      ref.invalidate(dashboardMetricsProvider);
+      ref.invalidate(recentTransactionsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Transaction ${tx.referenceCode} deleted'),
+            backgroundColor: AppTheme.primaryGreen,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Delete failed: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
   }
 
   static const _statusFilters = ['All Status', 'VERIFIED', 'FAILED', 'NEEDS_REVIEW', 'DUPLICATE', 'FRAUD_SUSPECTED'];

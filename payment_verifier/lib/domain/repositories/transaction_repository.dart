@@ -48,6 +48,9 @@ abstract class TransactionRepository {
 
   /// Delete all transactions (admin only)
   Future<void> clearAllTransactions();
+
+  /// Delete a single transaction (admin only)
+  Future<void> deleteTransaction(String id);
 }
 
 class DashboardMetrics {

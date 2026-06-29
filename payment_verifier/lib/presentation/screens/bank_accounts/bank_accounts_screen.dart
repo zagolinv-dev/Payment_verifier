@@ -10,11 +10,16 @@ import 'package:payment_verifier/presentation/widgets/custom_text_field.dart';
 import 'package:payment_verifier/presentation/widgets/gradient_button.dart';
 import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
 
-class BankAccountsScreen extends ConsumerWidget {
+class BankAccountsScreen extends ConsumerStatefulWidget {
   const BankAccountsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BankAccountsScreen> createState() => _BankAccountsScreenState();
+}
+
+class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
+  @override
+  Widget build(BuildContext context) {
     final accountsAsync = ref.watch(bankAccountsProvider);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
@@ -47,7 +52,7 @@ class BankAccountsScreen extends ConsumerWidget {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () => _showAddModal(context, ref),
+                    onTap: () => _showAddModal(context),
                     child: Container(
                       width: 44, height: 44,
                       decoration: BoxDecoration(
@@ -66,8 +71,9 @@ class BankAccountsScreen extends ConsumerWidget {
               child: RefreshIndicator(
                 color: AppTheme.primaryGreen,
                 backgroundColor: card,
-                onRefresh: () async => ref.invalidate(bankAccountsProvider),
+                onRefresh: () => ref.read(bankAccountNotifierProvider.notifier).reload(),
                 child: accountsAsync.when(
+                  skipLoadingOnReload: true,
                   data: (accounts) => accounts.isEmpty
                       ? ListView(children: [
                           const SizedBox(height: 80),
@@ -90,15 +96,9 @@ class BankAccountsScreen extends ConsumerWidget {
                             textPrimary: textPrimary,
                             textSecondary: textSecondary,
                             textTertiary: textTertiary,
-                            onToggle: (val) async {
-                              await ref.read(bankAccountNotifierProvider.notifier).toggleActive(accounts[i].id, val);
-                              ref.invalidate(bankAccountsProvider);
-                            },
-                            onEdit: () => _showEditModal(context, ref, accounts[i]),
-                            onDelete: () async {
-                              await ref.read(bankAccountNotifierProvider.notifier).deleteAccount(accounts[i].id);
-                              ref.invalidate(bankAccountsProvider);
-                            },
+                            onToggle: (val) => ref.read(bankAccountNotifierProvider.notifier).toggleActive(accounts[i].id, val),
+                            onEdit: () => _showEditModal(context, accounts[i]),
+                            onDelete: () => ref.read(bankAccountNotifierProvider.notifier).deleteAccount(accounts[i].id),
                           ),
                         ),
                   loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
@@ -112,8 +112,8 @@ class BankAccountsScreen extends ConsumerWidget {
     );
   }
 
-  void _showAddModal(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
+  void _showAddModal(BuildContext context) {
+    showBlurredBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -143,8 +143,8 @@ class BankAccountsScreen extends ConsumerWidget {
     );
   }
 
-  void _showEditModal(BuildContext context, WidgetRef ref, BankAccountEntity account) {
-    showModalBottomSheet(
+  void _showEditModal(BuildContext context, BankAccountEntity account) {
+    showBlurredBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -344,7 +344,7 @@ class _BankAccountCard extends StatelessWidget {
 
     showBlurredDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Delete Account?',
@@ -353,13 +353,13 @@ class _BankAccountCard extends StatelessWidget {
             style: GoogleFonts.inter(color: textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogCtx),
             child: Text('Cancel',
                 style: GoogleFonts.inter(color: textSecondary)),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(dialogCtx);
               onDelete();
             },
             child: Text('Delete',
@@ -396,11 +396,21 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
   @override
   void initState() {
     super.initState();
-    _holderController = TextEditingController(text: widget.initial?.holderName ?? '');
-    _accountController = TextEditingController(text: widget.initial?.accountNumber ?? '');
-    _phoneController = TextEditingController(text: widget.initial?.phone ?? '');
-    _notesController = TextEditingController(text: widget.initial?.notes ?? '');
-    _selectedBank = widget.initial?.bankName;
+    final initial = widget.initial;
+    final isTelebirr = initial?.bankName == 'Telebirr';
+    _holderController = TextEditingController(text: initial?.holderName ?? '');
+    // For Telebirr accounts, accountNumber IS the phone — don't put it in the account field
+    _accountController = TextEditingController(
+      text: isTelebirr ? '' : (initial?.accountNumber ?? ''),
+    );
+    // For Telebirr, pre-populate phone from accountNumber if phone field is empty
+    _phoneController = TextEditingController(
+      text: initial?.phone?.isNotEmpty == true
+          ? initial!.phone!
+          : (isTelebirr ? (initial?.accountNumber ?? '') : ''),
+    );
+    _notesController = TextEditingController(text: initial?.notes ?? '');
+    _selectedBank = initial?.bankName;
   }
 
   @override
@@ -415,18 +425,23 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate() || _selectedBank == null) return;
     setState(() => _isLoading = true);
-    await widget.onSubmit({
+    final isTelebirr = _selectedBank == 'Telebirr';
+    final payload = {
       'holderName': _holderController.text.trim(),
       'bankName': _selectedBank!,
-      'accountNumber': _accountController.text.trim(),
+      'accountNumber': isTelebirr ? _phoneController.text.trim() : _accountController.text.trim(),
       'phone': _phoneController.text.trim().isNotEmpty
           ? _phoneController.text.trim()
           : null,
       'notes': _notesController.text.trim().isNotEmpty
           ? _notesController.text.trim()
           : null,
-    });
-    if (mounted) Navigator.pop(context);
+    };
+    await widget.onSubmit(payload);
+    if (mounted) {
+      setState(() => _isLoading = false);
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -517,8 +532,14 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                                           fontSize: 14)),
                                 ))
                             .toList(),
-                        onChanged: (v) =>
-                            setState(() => _selectedBank = v),
+                        onChanged: (v) {
+                          setState(() {
+                            _selectedBank = v;
+                            if (v == 'Telebirr') {
+                              _accountController.clear();
+                            }
+                          });
+                        },
                       ),
                     ),
                   ),
@@ -526,18 +547,20 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
               ),
               const SizedBox(height: 16),
               AppTextField(
-                label: 'Account Number',
-                hint: '1234567890',
+                label: _selectedBank == 'Telebirr' ? 'Account Number (Managed by Phone)' : 'Account Number',
+                hint: _selectedBank == 'Telebirr' ? 'N/A (Managed by Phone Number)' : '1234567890',
                 controller: _accountController,
                 keyboardType: TextInputType.number,
-                validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                enabled: _selectedBank != 'Telebirr',
+                validator: (v) => _selectedBank == 'Telebirr' ? null : (v?.isEmpty == true ? 'Required' : null),
               ),
               const SizedBox(height: 16),
               AppTextField(
-                label: 'Phone Number (optional)',
+                label: _selectedBank == 'Telebirr' ? 'Phone Number (Required)' : 'Phone Number (optional)',
                 hint: '+251 9XX XXX XXX',
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
+                validator: (v) => _selectedBank == 'Telebirr' && (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: 16),
               AppTextField(

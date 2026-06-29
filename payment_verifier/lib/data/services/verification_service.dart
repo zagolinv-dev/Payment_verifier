@@ -111,9 +111,13 @@ class VerificationService {
         failures.add('Payment method mismatch');
       }
     } else if (detected != null) {
+      // No bank was manually selected; trust what OCR detected
       steps.add(VStep('Payment method', 'Detected: $detected ✓', StepState.pass));
+    } else if (selected != null) {
+      // OCR couldn't read a bank name, but the user explicitly selected one — trust the selection
+      steps.add(VStep('Payment method', '$selected (user selected)', StepState.pass));
     } else {
-      steps.add(VStep('Payment method', detected ?? 'Not detected', StepState.fail));
+      steps.add(const VStep('Payment method', 'Not detected', StepState.fail));
       failures.add('Payment method not detected');
     }
 
@@ -199,7 +203,8 @@ class VerificationService {
     if (receiverAcct != null) {
       steps.add(VStep('Extract receiver account', receiverAcct, StepState.pass));
     } else if (isTelebirr) {
-      steps.add(const VStep('Extract receiver account', 'N/A (Telebirr)', StepState.pass));
+      steps.add(const VStep('Extract receiver account', 'Not found', StepState.fail));
+      failures.add('Receiver account not found');
     } else {
       steps.add(VStep('Extract receiver account', 'Not found', StepState.fail));
       failures.add('Receiver account not found');
@@ -207,7 +212,19 @@ class VerificationService {
 
     // 7) Receiver account match (compare with business accounts)
     if (isTelebirr) {
-      steps.add(const VStep('Account match', 'N/A (Telebirr)', StepState.pass));
+      if (config.businessAccounts.isEmpty) {
+        steps.add(const VStep('Account match', 'No business accounts saved', StepState.fail));
+        failures.add('Business accounts not set');
+      } else if (receiverAcct == null) {
+        steps.add(const VStep('Account match', 'No receiver phone/account', StepState.fail));
+        failures.add('No receiver account');
+      } else if (_suffixMatch(receiverAcct, config.businessAccounts) ||
+          _phoneMatch(receiverAcct, config.businessAccounts)) {
+        steps.add(VStep('Account match', '$receiverAcct ✓', StepState.pass));
+      } else {
+        steps.add(VStep('Account match', '$receiverAcct ≠ your accounts', StepState.fail));
+        failures.add('Account not yours');
+      }
     } else if (config.businessAccounts.isEmpty) {
       steps.add(const VStep('Account match', 'No business accounts saved', StepState.fail));
       failures.add('Business accounts not set');
@@ -289,12 +306,16 @@ class VerificationService {
 
   String _canonicalBank(String name) {
     final n = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
-    if (n.contains('cbe') || n.contains('commercial') || n.contains('rely on')) return 'cbe';
-    if (n.contains('boa') || n.contains('abyssinia') || n.contains('the choice for all') || n.contains('scan the qr')) {
+    if (n.contains('cbe') || n.contains('commercial') || n.contains('rely on') || n.contains('negid')) return 'cbe';
+    if (n.contains('boa') || n.contains('abyssinia') || n.contains('abysinia') || n.contains('abysina') || n.contains('the choice for all') || n.contains('scan the qr')) {
       return 'boa';
     }
     if (n.contains('awash') || n.contains('awashbirr')) return 'awash';
-    if (n.contains('telebirr') || n.contains('tele birr') || n.contains('zemen') || n.contains('ethiotelecom')) {
+    if (n.contains('telebirr') || n.contains('tellebirr') || n.contains('telebir') ||
+        n.contains('tele birr') || n.contains('telle birr') ||
+        n.contains('ethiotelecom') || n.contains('ethio telecom') ||
+        n.contains('etelebirr') || n.contains('e telebirr') ||
+        n.contains('zemen') || n.contains('ethiotelecom')) {
       return 'telebirr';
     }
     return n;
@@ -314,6 +335,19 @@ class VerificationService {
     for (final f in fulls) {
       final digits = f.replaceAll(RegExp(r'\D'), '');
       if (digits.endsWith(tail) && (head == null || digits.startsWith(head))) return true;
+    }
+    return false;
+  }
+
+  bool _phoneMatch(String extracted, List<String> businessAccounts) {
+    final ex = extracted.replaceAll(RegExp(r'\D'), '');
+    if (ex.length < 9) return false;
+    final exTail = ex.length >= 9 ? ex.substring(ex.length - 9) : ex;
+    for (final acct in businessAccounts) {
+      final digits = acct.replaceAll(RegExp(r'\D'), '');
+      if (digits.isEmpty) continue;
+      final tail = digits.length >= 9 ? digits.substring(digits.length - 9) : digits;
+      if (exTail == tail || ex.endsWith(tail) || digits.endsWith(exTail)) return true;
     }
     return false;
   }

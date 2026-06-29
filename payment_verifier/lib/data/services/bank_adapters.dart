@@ -16,7 +16,10 @@ class BankRegistry {
     BankAdapter(
       id: 'telebirr',
       name: 'Telebirr',
-      detect: (t) => _has(t, ['telebirr', 'tele birr', 'ethiotelecom']),
+      detect: (t) => _has(t, [
+        'telebirr', 'tellebirr', 'telebir', 'tele birr', 'telle birr',
+        'ethiotelecom', 'ethio telecom', 'etelebirr', 'e-telebirr',
+      ]),
     ),
     BankAdapter(
       id: 'awash',
@@ -26,12 +29,22 @@ class BankRegistry {
     BankAdapter(
       id: 'boa',
       name: 'Bank of Abyssinia',
-      detect: (t) => _has(t, ['bank of abyssinia', 'abyssinia', 'source account', 'the choice for all']),
+      detect: (t) => _has(t, ['bank of abyssinia', 'abyssinia', 'abysinia', 'abysina', 'source account', 'the choice for all']),
+    ),
+    BankAdapter(
+      id: 'zemen',
+      name: 'Zemen Bank',
+      detect: (t) => _has(t, ['zemen bank', 'zemen']),
+    ),
+    BankAdapter(
+      id: 'nib',
+      name: 'Nib International Bank',
+      detect: (t) => _has(t, ['nib international', 'nib bank', 'nib ']),
     ),
     BankAdapter(
       id: 'cbe',
       name: 'Commercial Bank of Ethiopia',
-      detect: (t) => _has(t, ['commercial bank of ethiopia', 'cbe', 'rely on']),
+      detect: (t) => _has(t, ['commercial bank of ethiopia', 'cbe', 'rely on', 'negid']),
     ),
   ];
 
