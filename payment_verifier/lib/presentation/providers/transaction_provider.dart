@@ -128,7 +128,6 @@ class VerifyState {
     this.receiptImage,
     this.ocrCompleted = false,
     this.attemptCount = 0,
-    this.maxAttempts = 3,
     this.verifyResult,
     this.dateElapsed = '',
     this.ocrExtractedCustomerName = '',
@@ -152,7 +151,6 @@ class VerifyState {
   final String? receiptImage;
   final bool ocrCompleted;
   final int attemptCount;
-  final int maxAttempts;
   final VerifyResult? verifyResult;
   final String dateElapsed;
   final String ocrExtractedCustomerName;
@@ -163,8 +161,6 @@ class VerifyState {
       receiptImage != null &&
       referenceCode.isNotEmpty &&
       orderTotal > 0;
-
-  bool get isBlocked => attemptCount >= maxAttempts;
 
   VerifyState copyWith({
     String? selectedBank,
@@ -184,7 +180,6 @@ class VerifyState {
     String? receiptImage,
     bool? ocrCompleted,
     int? attemptCount,
-    int? maxAttempts,
     VerifyResult? verifyResult,
     String? dateElapsed,
     String? ocrExtractedCustomerName,
@@ -210,7 +205,6 @@ class VerifyState {
       receiptImage: receiptImage ?? this.receiptImage,
       ocrCompleted: ocrCompleted ?? this.ocrCompleted,
       attemptCount: attemptCount ?? this.attemptCount,
-      maxAttempts: maxAttempts ?? this.maxAttempts,
       verifyResult: verifyResult ?? this.verifyResult,
       dateElapsed: dateElapsed ?? this.dateElapsed,
       ocrExtractedCustomerName: ocrExtractedCustomerName ?? this.ocrExtractedCustomerName,
@@ -323,14 +317,10 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     state = state.copyWith(receiptImage: path, attemptCount: 0, ocrCompleted: false);
   }
   void setOcrCompleted() => state = state.copyWith(ocrCompleted: true);
-  void setAttemptCount(int n) => state = state.copyWith(attemptCount: n);
   void setVerifyResult(VerifyResult? r) => state = state.copyWith(
     verifyResult: r,
     dateElapsed: r?.dateElapsed ?? '',
   );
-
-  void incrementAttempt() =>
-      state = state.copyWith(attemptCount: state.attemptCount + 1);
 
   void setError(String msg) => state = state.copyWith(error: msg);
 

@@ -288,10 +288,8 @@ class VerificationService {
     Verdict verdict;
     if (failures.isEmpty) {
       verdict = Verdict.verified;
-    } else if (config.attemptCount >= config.maxAttempts - 1) {
-      verdict = Verdict.failed;
     } else {
-      verdict = Verdict.tryAgain;
+      verdict = Verdict.failed;
     }
 
     return VerifyResult(steps, verdict, ocr, dateElapsed);

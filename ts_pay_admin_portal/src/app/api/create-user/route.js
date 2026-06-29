@@ -34,16 +34,17 @@ export async function POST(request) {
 
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
-      .update({
+      .upsert({
+        id: userData.user.id,
+        email,
         full_name: fullName,
         role: role || "WAITRESS",
-        status: role === "ADMIN" ? "APPROVED" : "APPROVED",
+        status: "APPROVED",
         phone: phone || null,
         owner_name: ownerName || null,
         address: address || null,
         description: description || null,
-      })
-      .eq("id", userData.user.id);
+      });
 
     if (profileError) {
       return Response.json({ error: "User created but profile update failed: " + profileError.message }, { status: 500 });

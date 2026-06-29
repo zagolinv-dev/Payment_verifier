@@ -94,6 +94,12 @@ function ProfileSection({ darkMode, showToast }) {
     try {
       const { error } = await supabase.auth.updateUser({ email: newEmail });
       if (error) throw error;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        await supabase.from("profiles").update({ email: newEmail }).eq("id", session.user.id);
+      }
+
       showToast("Confirmation email sent. Please check your inbox.", "success");
     } catch (err) { showToast(err.message, "error"); }
     finally { setSavingEmail(false); }
@@ -338,11 +344,17 @@ function ChangePasswordSection({ darkMode, showToast }) {
     if (newPassword.length < 6) { showToast("Password must be at least 6 characters.", "error"); return; }
     setSaving(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) { showToast("No authenticated session found. Please sign in again.", "error"); setSaving(false); return; }
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: (await supabase.auth.getSession()).data.session?.user?.email || "",
+        email: user.email,
         password: currentPassword,
       });
-      if (signInError) { showToast("Current password is incorrect.", "error"); setSaving(false); return; }
+      if (signInError) {
+        showToast(signInError.message?.includes("Email not confirmed") ? "Email not confirmed. Please verify your email first." : "Current password is incorrect.", "error");
+        setSaving(false);
+        return;
+      }
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
       showToast("Password updated successfully!", "success");

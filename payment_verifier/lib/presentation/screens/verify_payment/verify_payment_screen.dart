@@ -242,8 +242,6 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     final notifier = ref.read(verifyProvider.notifier);
     final st = ref.read(verifyProvider);
 
-    notifier.setAttemptCount(st.attemptCount + 1);
-
     final accounts = ref.read(bankAccountsProvider).valueOrNull ?? [];
     final businessAccounts = accounts.map((a) => a.accountNumber).toList();
     final txRepo = ref.read(transactionRepositoryProvider);
@@ -273,8 +271,6 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
         expectedAmount: st.orderTotal > 0 ? st.orderTotal : null,
         businessAccounts: businessAccounts,
         selectedBank: st.selectedBank,
-        attemptCount: st.attemptCount,
-        maxAttempts: st.maxAttempts,
         ocrDetectedBank: st.ocrDetectedBank,
         expectedCustomerName: st.buyerName.isNotEmpty ? st.buyerName : null,
         expectedReceiverName: expectedReceiverName,
@@ -312,7 +308,6 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     final bg = isDark ? AppTheme.bgCard : AppTheme.lightCard;
     final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final st = ref.read(verifyProvider);
 
     showGeneralDialog(
       context: context,
@@ -377,17 +372,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
                                           : AppTheme.error,
                                 ),
                               ),
-                              if (result.verdict == Verdict.tryAgain)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    '${st.attemptCount}/${st.maxAttempts} attempts used',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: textSecondary,
-                                    ),
-                                  ),
-                                ),
+
                             ],
                           ),
                         ),
@@ -613,44 +598,6 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
                   ),
                 ],
 
-                if (state.isBlocked)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.error.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.error.withOpacity(0.3)),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            '${state.maxAttempts} failed attempts reached. Pick a new receipt image to try again.',
-                            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.error),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            onPressed: () {
-                              ref.read(verifyProvider.notifier).reset();
-                              setState(() {
-                                _selectedImage = null;
-                                _ocrStatus = '';
-                                _amountController.clear();
-                                _referenceController.clear();
-                                _receiverAcctController.clear();
-                              });
-                            },
-                            icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryGreen, size: 18),
-                            label: Text('Reset & Try Again', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.w600, fontSize: 13)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
                 const SizedBox(height: 20),
                 AppTextField(
                   label: 'Customer Name',
@@ -770,7 +717,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
                   label: 'Verify Payment',
                   icon: Icons.verified_rounded,
                   isLoading: state.isLoading,
-                  onPressed: state.isLoading || !state.canVerify || state.isBlocked ? null : _verify,
+                  onPressed: state.isLoading || !state.canVerify ? null : _verify,
                 ),
                 const SizedBox(height: 40),
               ],

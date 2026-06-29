@@ -28,7 +28,8 @@ export default function UsersPage() {
 
   const loadUsers = async () => {
     try {
-      const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
       setUsers(data || []);
     } catch (err) { console.error("Failed to load users:", err); }
     finally { setLoading(false); }
@@ -48,7 +49,7 @@ export default function UsersPage() {
       showToast(`User ${newUser.email} created successfully!`, "success");
       setShowAddModal(false);
       setNewUser({ email: "", password: "", fullName: "", role: "WAITRESS", phone: "", ownerName: "", address: "", description: "" });
-      loadUsers();
+      await loadUsers();
     } catch (err) { showToast(err.message, "error"); }
     setCreating(false);
   };

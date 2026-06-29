@@ -85,28 +85,23 @@ export default function NotificationBell({ darkMode }) {
     } catch {}
 
     try {
-      const [profilesResult, txResult] = await Promise.all([
-        supabase.from("profiles").select("id, created_at, full_name", { count: "exact" }).eq("role", "ADMIN"),
+      const [merchantResult, txResult] = await Promise.all([
+        supabase.from("merchants").select("id, created_at, business_name").eq("status", "PENDING").limit(5),
         supabase.from("transactions").select("id, status, amount, created_at").eq("status", "FAILED").limit(5),
       ]);
 
       const computed = [];
 
-      if (profilesResult.count > 0) {
-        const recentApprovals = (profilesResult.data || []).filter(
-          (p) => new Date(p.created_at) > new Date(Date.now() - 86400000)
-        );
-        recentApprovals.forEach((p) => {
-          computed.push({
-            id: `approval-${p.id}`,
-            type: "approval",
-            title: "New Merchant Registration",
-            message: `${p.full_name || "Someone"} registered as a merchant.`,
-            is_read: false,
-            created_at: p.created_at,
-          });
+      (merchantResult.data || []).forEach((m) => {
+        computed.push({
+          id: `approval-${m.id}`,
+          type: "approval",
+          title: "New Merchant Registration",
+          message: `${m.business_name || "Someone"} registered as a merchant.`,
+          is_read: false,
+          created_at: m.created_at,
         });
-      }
+      });
 
       (txResult.data || []).forEach((t) => {
         computed.push({
