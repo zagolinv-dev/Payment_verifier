@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import { BellIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon } from "./Icons";
@@ -10,10 +10,32 @@ export default function NotificationBell({ darkMode }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const prevIdsRef = useRef(new Set());
+  const notifiedIdsRef = useRef(new Set());
   const ref = useRef();
   const portalRef = useRef();
 
   useEffect(() => { setMounted(true); }, []);
+
+  const requestNotifyPermission = useCallback(async () => {
+    if (!("Notification" in window)) return false;
+    if (Notification.permission === "granted") return true;
+    if (Notification.permission === "denied") return false;
+    const result = await Notification.requestPermission();
+    return result === "granted";
+  }, []);
+
+  const showBrowserNotification = useCallback((title, body) => {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    try {
+      const n = new Notification(title, {
+        body,
+        icon: "/favicon.ico",
+        tag: "ts-verify-notification",
+      });
+      setTimeout(() => n.close(), 8000);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     fetchNotifications();
@@ -45,6 +67,17 @@ export default function NotificationBell({ darkMode }) {
         .limit(10);
 
       if (dbNotes && dbNotes.length > 0) {
+        const newIds = new Set(dbNotes.map((n) => n.id));
+        const prevIds = prevIdsRef.current;
+        if (prevIds.size > 0) {
+          dbNotes.forEach((n) => {
+            if (!prevIds.has(n.id) && !notifiedIdsRef.current.has(n.id)) {
+              notifiedIdsRef.current.add(n.id);
+              showBrowserNotification(n.title, n.message);
+            }
+          });
+        }
+        prevIdsRef.current = newIds;
         setNotifications(dbNotes);
         setLoading(false);
         return;
@@ -87,7 +120,19 @@ export default function NotificationBell({ darkMode }) {
       });
 
       computed.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      setNotifications(computed.slice(0, 10));
+      const sliced = computed.slice(0, 10);
+      const newIds = new Set(sliced.map((n) => n.id));
+      const prevIds = prevIdsRef.current;
+      if (prevIds.size > 0) {
+        sliced.forEach((n) => {
+          if (!prevIds.has(n.id) && !notifiedIdsRef.current.has(n.id)) {
+            notifiedIdsRef.current.add(n.id);
+            showBrowserNotification(n.title, n.message);
+          }
+        });
+      }
+      prevIdsRef.current = newIds;
+      setNotifications(sliced);
     } catch {}
     setLoading(false);
   };
@@ -102,6 +147,26 @@ export default function NotificationBell({ darkMode }) {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
   };
 
+  const markAllRead = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    await supabase.from("notifications").update({ is_read: true }).eq("user_id", session.user.id);
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+  };
+
+  const clearAll = async () => {
+    if (!confirm("Delete all notifications?")) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const dbIds = notifications.filter((n) => !n.id.startsWith("approval-") && !n.id.startsWith("failed-")).map((n) => n.id);
+    if (dbIds.length > 0) {
+      await supabase.from("notifications").delete().in("id", dbIds);
+    }
+    notifiedIdsRef.current = new Set();
+    prevIdsRef.current = new Set();
+    setNotifications([]);
+  };
+
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const typeStyles = {
@@ -113,7 +178,7 @@ export default function NotificationBell({ darkMode }) {
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => { setOpen(!open); requestNotifyPermission(); }}
         className={`relative p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer ${
           darkMode
             ? "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10"
@@ -133,19 +198,41 @@ export default function NotificationBell({ darkMode }) {
         <div ref={portalRef} className={`fixed top-14 left-3 right-3 sm:top-16 sm:right-4 sm:left-auto sm:w-96 rounded-2xl border shadow-2xl overflow-hidden z-[100] transition-all animate-scaleIn ${
           darkMode ? "bg-[#0F1626] border-white/[0.06]" : "bg-white border-black/5"
         }`} style={{ maxHeight: "calc(100vh - 80px)" }}>
-          <div className={`px-5 py-3.5 border-b flex items-center justify-between ${
+          <div className={`px-5 py-3.5 border-b flex items-center justify-between gap-2 ${
             darkMode ? "border-white/[0.06]" : "border-black/5"
           }`}>
             <h3 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? "text-zinc-300" : "text-zinc-700"}`}>
               Notifications
             </h3>
-            {unreadCount > 0 && (
-              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"
-              }`}>
-                {unreadCount} new
-              </span>
-            )}
+            <div className="flex items-center gap-1.5">
+              {notifications.some((n) => !n.is_read) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); markAllRead(); }}
+                  className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                    darkMode ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                  }`}
+                >
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); clearAll(); }}
+                  className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                    darkMode ? "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "bg-rose-50 text-rose-600 hover:bg-rose-100"
+                  }`}
+                >
+                  Clear all
+                </button>
+              )}
+              {unreadCount > 0 && (
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                  darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"
+                }`}>
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="overflow-y-auto" style={{ maxHeight: "360px" }}>

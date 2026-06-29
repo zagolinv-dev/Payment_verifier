@@ -74,13 +74,18 @@ export default function DashboardLayout({ children, darkMode, setDarkMode }) {
 
           <div className="lg:hidden flex items-center gap-2.5">
             <img src="/logo.png" alt="T's Verify" className="w-7 h-7 object-contain" />
-            <span className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>T's Pay</span>
+            <span className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>T's Verify</span>
           </div>
 
           <div className="flex items-center gap-3 ml-auto">
             <NotificationBell darkMode={darkMode} />
             <button
-              onClick={() => setDarkMode(!darkMode)}
+              onClick={() => {
+                const next = !darkMode;
+                setDarkMode(next);
+                localStorage.setItem("adminDarkMode", JSON.stringify(next));
+                window.dispatchEvent(new CustomEvent("darkmodechange", { detail: next }));
+              }}
               className={`p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer ${
                 darkMode
                   ? "bg-white/5 border-white/10 text-amber-400 hover:bg-white/10 hover:text-amber-300"
@@ -90,16 +95,6 @@ export default function DashboardLayout({ children, darkMode, setDarkMode }) {
             >
               {darkMode ? <SunIcon className="w-4 h-4 sm:w-5 sm:h-5" /> : <MoonIcon className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
-            <div className={`h-6 w-px ${darkMode ? "bg-white/10" : "bg-black/10"}`} />
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-              darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"
-            }`}>
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 animate-ping opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
-              <span className="hidden sm:inline">Online</span>
-            </div>
           </div>
         </header>
         <div className={`flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 transition-colors duration-300 ${

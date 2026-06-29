@@ -64,8 +64,16 @@ class NotificationsScreen extends ConsumerWidget {
                                 ),
                               );
                               if (confirm == true) {
-                                await ref.read(clearAllNotificationsProvider)();
-                                ref.invalidate(notificationsProvider);
+                                try {
+                                  await ref.read(clearAllNotificationsProvider)();
+                                  ref.invalidate(notificationsProvider);
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed to clear notifications')),
+                                    );
+                                  }
+                                }
                               }
                             },
                             child: Container(
@@ -166,8 +174,10 @@ class NotificationsScreen extends ConsumerWidget {
                               );
                             },
                             onDismissed: (_) async {
-                              await ref.read(deleteNotificationProvider)(n.id);
-                              ref.invalidate(notificationsProvider);
+                              try {
+                                await ref.read(deleteNotificationProvider)(n.id);
+                                ref.invalidate(notificationsProvider);
+                              } catch (_) {}
                             },
                             child: _NotificationTile(
                               item: n,

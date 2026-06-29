@@ -9,6 +9,7 @@ import 'package:payment_verifier/presentation/screens/home/home_shell.dart';
 import 'package:payment_verifier/presentation/screens/manage_users/manage_users_screen.dart';
 import 'package:payment_verifier/presentation/screens/onboarding/onboarding_screen.dart';
 import 'package:payment_verifier/presentation/screens/reports/reports_screen.dart';
+import 'package:payment_verifier/presentation/screens/about/about_screen.dart';
 import 'package:payment_verifier/presentation/screens/notifications/notifications_screen.dart';
 import 'package:payment_verifier/presentation/screens/settings/settings_screen.dart';
 import 'package:payment_verifier/presentation/screens/splash/splash_screen.dart';
@@ -29,6 +30,7 @@ class AppRoutes {
   static const reports = '/home/reports';
   static const notifications = '/home/notifications';
   static const settings = '/home/settings';
+  static const about = '/home/about';
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -111,6 +113,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: AppRoutes.notifications,
             parentNavigatorKey: _shellNavigatorKey,
             builder: (context, state) => const NotificationsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.about,
+            parentNavigatorKey: _shellNavigatorKey,
+            builder: (context, state) => const AboutScreen(),
           ),
         ],
       ),

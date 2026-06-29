@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:payment_verifier/core/router/app_router.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
+import 'package:payment_verifier/data/services/push_notification_service.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/notification_provider.dart';
@@ -23,11 +24,40 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
+  void initState() {
+    super.initState();
+    PushNotificationService.instance.init();
+  }
+
+  @override
+  void dispose() {
+    PushNotificationService.instance.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
+    if (user != null) {
+      PushNotificationService.instance.subscribe(
+        ref.read(supabaseClientProvider),
+        user.id,
+      );
+    }
+
+    ref.listen(currentUserProvider, (prev, next) {
+      if (next != null) {
+        PushNotificationService.instance.subscribe(
+          ref.read(supabaseClientProvider),
+          next.id,
+        );
+      } else {
+        PushNotificationService.instance.dispose();
+      }
+    });
     final isAdmin = ref.watch(isAdminProvider);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
-    final user = ref.watch(currentUserProvider);
     final location = GoRouterState.of(context).matchedLocation;
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
@@ -148,6 +178,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       case AppRoutes.manageUsers: return 'Manage Team';
       case AppRoutes.reports: return 'Reports';
       case AppRoutes.settings: return 'Settings';
+      case AppRoutes.about: return 'About';
       default: return '';
     }
   }
@@ -576,8 +607,8 @@ class _OvalNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final navBg = isDark ? const Color(0xFF0E1A12).withOpacity(0.97) : Colors.white.withOpacity(0.95);
-    final borderColor = isDark ? Colors.white.withOpacity(0.08) : AppTheme.lightBorderSubtle;
+    final navBg = isDark ? AppTheme.bgCard.withOpacity(0.95) : Colors.white.withOpacity(0.95);
+    final borderColor = isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle;
     final shadowColor = isDark ? Colors.black.withOpacity(0.5) : Colors.black.withOpacity(0.12);
     final bottomPad = MediaQuery.of(context).padding.bottom;
 
@@ -591,7 +622,7 @@ class _OvalNavBar extends StatelessWidget {
           border: Border.all(color: borderColor, width: 1),
           boxShadow: [
             BoxShadow(color: shadowColor, blurRadius: 30, offset: const Offset(0, 10)),
-            BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.08), blurRadius: 20, spreadRadius: -4, offset: const Offset(0, 4)),
+            if (!isDark) BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.08), blurRadius: 20, spreadRadius: -4, offset: const Offset(0, 4)),
           ],
         ),
         child: ClipRRect(

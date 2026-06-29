@@ -1060,6 +1060,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     if (_forgotEmailController.text.trim().isEmpty) return;
     setState(() => _isLoadingForgot = true);
     try {
+      final supabase = ref.read(supabaseClientProvider);
+      final profile = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('email', _forgotEmailController.text.trim())
+          .maybeSingle();
+
+      if (profile == null || profile['role'] != 'ADMIN') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppTheme.error,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: Text(
+              'No manager account found with this email.',
+              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+            ),
+          ),
+        );
+        setState(() => _isLoadingForgot = false);
+        return;
+      }
+
       await ref.read(authProvider.notifier).resetPassword(
         _forgotEmailController.text.trim(),
       );
@@ -1098,6 +1122,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         'name': _forgotNameController.text.trim(),
         'email': _forgotEmailController.text.trim(),
       });
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

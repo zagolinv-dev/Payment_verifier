@@ -201,7 +201,10 @@ class SupabaseTransactionDatasource {
   }
 
   Future<void> deleteTransaction(String id) async {
-    await _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+    await _client
+        .from(AppConstants.transactionsTable)
+        .delete()
+        .eq('id', id);
   }
 
   Future<void> clearAllTransactions() async {

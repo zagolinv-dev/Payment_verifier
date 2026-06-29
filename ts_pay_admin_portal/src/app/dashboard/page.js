@@ -13,21 +13,20 @@ const COLORS = ["#10b981", "#f59e0b", "#ef4444"];
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState({
-    totalVolume: 0, platformRevenue: 0, totalTransactions: 0,
+    totalAmount: 0, platformRevenue: 0, totalTransactions: 0,
     pendingCount: 0, verifiedCount: 0, failedCount: 0, userCount: 0, merchantCount: 0,
   });
   const [weeklyData, setWeeklyData] = useState([]);
   const [bankDistribution, setBankDistribution] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
-  }, []);
-
-  useEffect(() => { localStorage.setItem("adminDarkMode", JSON.stringify(darkMode)); }, [darkMode]);
+  const deleteTransaction = async (id) => {
+    if (!confirm("Delete this transaction?")) return;
+    await supabase.from("transactions").delete().eq("id", id);
+    setRecentActivity((prev) => prev.filter((tx) => tx.id !== id));
+  };
 
   useEffect(() => { loadData(); }, []);
 
@@ -38,13 +37,13 @@ export default function DashboardPage() {
         supabase.from("profiles").select("*", { count: "exact", head: true }),
       ]);
       const txns = txResult.data || [];
-      const totalVolume = txns.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+      const totalAmount = txns.reduce((s, t) => s + (Number(t.amount) || 0), 0);
       const verifiedCount = txns.filter((t) => t.status === "VERIFIED").length;
       const failedCount = txns.filter((t) => t.status === "FAILED").length;
       const pendingCount = txns.filter((t) => t.status === "PENDING").length;
 
       setMetrics({
-        totalVolume, platformRevenue: totalVolume * 0.01,
+        totalAmount, platformRevenue: totalAmount * 0.01,
         totalTransactions: txns.length, pendingCount,
         verifiedCount, failedCount,
         userCount: profileResult.count || 0,
@@ -58,7 +57,7 @@ export default function DashboardPage() {
         const dayTxns = txns.filter((t) => t.created_at?.startsWith(dayStr));
         days.push({
           name: d.toLocaleDateString("en-US", { weekday: "short" }),
-          volume: dayTxns.reduce((s, t) => s + (Number(t.amount) || 0), 0),
+          total: dayTxns.reduce((s, t) => s + (Number(t.amount) || 0), 0),
           count: dayTxns.length,
         });
       }
@@ -105,19 +104,10 @@ export default function DashboardPage() {
               Real-time settlement overview
             </p>
           </div>
-          <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold tracking-wider flex items-center gap-2 ${
-            darkMode ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-emerald-50 border-emerald-200 text-emerald-600"
-          }`}>
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 animate-ping opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            Live
-          </div>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-          <MetricCard darkMode={darkMode} title="Processed Volume" value={`${(metrics.totalVolume / 1000).toFixed(0)}K`} subtitle="ETB" icon={WalletIcon} />
+          <MetricCard darkMode={darkMode}           title="Processed Total" value={`${(metrics.totalAmount / 1000).toFixed(0)}K`} subtitle="ETB" icon={WalletIcon} />
           <MetricCard darkMode={darkMode} title="Platform Revenue" value={metrics.platformRevenue.toFixed(0)} subtitle="ETB (1% fee)" icon={RevenueIcon} />
           <MetricCard darkMode={darkMode} title="Transactions" value={metrics.totalTransactions} subtitle={`${metrics.verifiedCount} verified`} icon={ActivityIcon} />
           <MetricCard darkMode={darkMode} title="Pending" value={metrics.pendingCount} subtitle="awaiting review" icon={PendingIcon} />
@@ -129,16 +119,16 @@ export default function DashboardPage() {
           }`}>
             <div className={`absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none ${darkMode ? "bg-emerald-500/5" : "bg-emerald-500/3"}`} />
             <h3 className={`relative text-xs font-bold uppercase tracking-wider mb-5 ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
-              7-Day Volume Trend
+              7-Day Total Trend
             </h3>
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={weeklyData}>
-                <defs><linearGradient id="volumeGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.25} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
+                <defs><linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.25} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#1E2D47" : "#E4E4E7"} />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: darkMode ? "#71717a" : "#a1a1aa" }} />
                 <YAxis tick={{ fontSize: 10, fill: darkMode ? "#71717a" : "#a1a1aa" }} />
                 <Tooltip contentStyle={{ backgroundColor: darkMode ? "#0F1626" : "#fff", border: `1px solid ${darkMode ? "#1E2D47" : "#E4E4E7"}`, borderRadius: 8, fontSize: 12 }} />
-                <Area type="monotone" dataKey="volume" stroke="#10b981" fill="url(#volumeGrad)" strokeWidth={2.5} />
+                <Area type="monotone" dataKey="total" stroke="#10b981" fill="url(#totalGrad)" strokeWidth={2.5} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -246,6 +236,7 @@ export default function DashboardPage() {
                   <th className="pb-3 px-5">Amount</th>
                   <th className="pb-3 px-5">Status</th>
                   <th className="pb-3 px-5 text-right">Date</th>
+                  <th className="pb-3 px-5 text-right w-10">Action</th>
                 </tr>
               </thead>
               <tbody className={`divide-y font-medium ${darkMode ? "divide-white/[0.04] text-zinc-300" : "divide-black/5 text-zinc-700"}`}>
@@ -256,6 +247,19 @@ export default function DashboardPage() {
                     <td className="px-5 font-mono">{Number(tx.amount).toLocaleString()} ETB</td>
                     <td className="px-5"><StatusBadge status={tx.status} /></td>
                     <td className="py-3 px-5 text-right font-mono text-zinc-500">{new Date(tx.created_at).toLocaleDateString()}</td>
+                    <td className="py-3 px-5 text-right">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteTransaction(tx.id); }}
+                        className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                          darkMode ? "text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10" : "text-zinc-400 hover:text-rose-600 hover:bg-rose-50"
+                        }`}
+                        title="Delete transaction"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

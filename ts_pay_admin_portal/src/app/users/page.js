@@ -8,7 +8,7 @@ import DashboardLayout from "../dashboard-layout";
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -19,13 +19,7 @@ export default function UsersPage() {
   });
   const [toast, setToast] = useState({ message: "", type: "info" });
 
-  useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
-    loadUsers();
-  }, []);
-
-  useEffect(() => { localStorage.setItem("adminDarkMode", JSON.stringify(darkMode)); }, [darkMode]);
+  useEffect(() => { loadUsers(); }, []);
 
   const showToast = (msg, type = "success") => {
     setToast({ message: msg, type });

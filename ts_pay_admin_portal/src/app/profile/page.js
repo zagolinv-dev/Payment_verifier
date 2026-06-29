@@ -8,7 +8,7 @@ import DashboardLayout from "../dashboard-layout";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,13 +21,7 @@ export default function ProfilePage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
-    loadProfile();
-  }, []);
-
-  useEffect(() => { localStorage.setItem("adminDarkMode", JSON.stringify(darkMode)); }, [darkMode]);
+  useEffect(() => { loadProfile(); }, []);
 
   const showToast = (msg, type = "success") => {
     setToast({ message: msg, type });

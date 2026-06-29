@@ -104,6 +104,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final isAdmin = ref.watch(isAdminProvider);
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
+    final isAdmin = ref.watch(isAdminProvider);
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
     final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
@@ -255,12 +256,49 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
                           itemCount: txs.length,
-                          itemBuilder: (ctx, i) => TransactionListItem(
-                            transaction: txs[i],
-                            onDelete: isAdmin
+                          itemBuilder: (ctx, i) {
+                            final tx = txs[i];
+                             onDelete: isAdmin
                                 ? () => _confirmDeleteTransaction(context, ref, txs[i])
                                 : null,
-                          ),
+                            final tile = TransactionListItem(transaction: tx);
+                            if (!isAdmin) return tile;
+                            return Dismissible(
+                              key: ValueKey(tx.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.error.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 22),
+                              ),
+                              confirmDismiss: (_) async {
+                                return await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: card,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    title: Text('Delete transaction?', style: GoogleFonts.outfit(color: textPrimary)),
+                                    content: Text('Remove ${tx.referenceCode}?', style: GoogleFonts.inter(color: textSecondary)),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary))),
+                                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Delete', style: GoogleFonts.inter(color: AppTheme.error, fontWeight: FontWeight.w600))),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (_) async {
+                                try {
+                                  await ref.read(deleteTransactionProvider)(tx.id);
+                                  ref.invalidate(transactionsProvider);
+                                } catch (_) {}
+                              },
+                              child: tile,
+                            );
+                          },
                         ),
                   loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
                   error: (e, _) => Center(child: Text('Error: $e', style: GoogleFonts.inter(color: textSecondary))),

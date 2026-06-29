@@ -115,16 +115,30 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
   void _showAddModal(BuildContext context) {
     showBlurredBottomSheet(
       context: context,
-      builder: (_) => _AddBankAccountModal(
-        onSubmit: (data) async {
-          await ref.read(bankAccountNotifierProvider.notifier).createAccount(
-            holderName: data['holderName']!,
-            bankName: data['bankName']!,
-            accountNumber: data['accountNumber']!,
-            phone: data['phone'],
-            notes: data['notes'],
-          );
-        },
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _AddBankAccountModal(
+          scrollController: scrollController,
+          onSubmit: (data) async {
+            final success = await ref
+                .read(bankAccountNotifierProvider.notifier)
+                .createAccount(
+                  holderName: data['holderName']!,
+                  bankName: data['bankName']!,
+                  accountNumber: data['accountNumber']!,
+                  phone: data['phone'],
+                  notes: data['notes'],
+                );
+            if (success) {
+              ref.invalidate(bankAccountsProvider);
+            }
+          },
+        ),
       ),
     );
   }
@@ -132,18 +146,32 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
   void _showEditModal(BuildContext context, BankAccountEntity account) {
     showBlurredBottomSheet(
       context: context,
-      builder: (_) => _AddBankAccountModal(
-        initial: account,
-        onSubmit: (data) async {
-          await ref.read(bankAccountNotifierProvider.notifier).updateAccount(
-            id: account.id,
-            holderName: data['holderName']!,
-            bankName: data['bankName']!,
-            accountNumber: data['accountNumber']!,
-            phone: data['phone'],
-            notes: data['notes'],
-          );
-        },
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => _AddBankAccountModal(
+          scrollController: scrollController,
+          initial: account,
+          onSubmit: (data) async {
+            final success = await ref
+                .read(bankAccountNotifierProvider.notifier)
+                .updateAccount(
+                  id: account.id,
+                  holderName: data['holderName']!,
+                  bankName: data['bankName']!,
+                  accountNumber: data['accountNumber']!,
+                  phone: data['phone'],
+                  notes: data['notes'],
+                );
+            if (success) {
+              ref.invalidate(bankAccountsProvider);
+            }
+          },
+        ),
       ),
     );
   }
@@ -347,7 +375,8 @@ class _BankAccountCard extends StatelessWidget {
 // ── Add Bank Account Modal ────────────────────────────────────────────────────
 
 class _AddBankAccountModal extends StatefulWidget {
-  const _AddBankAccountModal({required this.onSubmit, this.initial});
+  const _AddBankAccountModal({required this.scrollController, required this.onSubmit, this.initial});
+  final ScrollController scrollController;
   final BankAccountEntity? initial;
   final Future<void> Function(Map<String, String?>) onSubmit;
 
@@ -434,6 +463,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SingleChildScrollView(
+        controller: widget.scrollController,
         child: Form(
           key: _formKey,
           child: Column(
@@ -493,7 +523,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                         dropdownColor: dropdownBg,
                         icon: const Icon(Icons.keyboard_arrow_down_rounded,
                             color: AppTheme.textSecondary),
-                        items: BankName.values
+                        items: BankName.addAccountOptions
                             .map((b) => DropdownMenuItem(
                                   value: b.displayName,
                                   child: Text(b.displayName,

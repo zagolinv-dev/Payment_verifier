@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { SunIcon, MoonIcon, EyeIcon, EyeOffIcon } from "@/components/Icons";
 
-function SplashScreen({ darkMode }) {
+function SplashScreen() {
   const [show, setShow] = useState(true);
 
   useEffect(() => {
@@ -16,11 +16,9 @@ function SplashScreen({ darkMode }) {
   if (!show) return null;
 
   return (
-    <div className={`fixed inset-0 z-[100] flex flex-col items-center justify-center transition-opacity duration-700 ${
-      darkMode ? "bg-[#080E1A]" : "bg-zinc-50"
-    }`}>
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center transition-opacity duration-700 bg-zinc-50">
       <div className="relative animate-float">
-        <div className={`absolute inset-0 rounded-full blur-3xl ${darkMode ? "bg-emerald-500/10" : "bg-emerald-500/5"}`} />
+        <div className="absolute inset-0 rounded-full blur-3xl bg-emerald-500/5" />
         <img
           src="/logo.png"
           alt="T's Verify"
@@ -33,7 +31,7 @@ function SplashScreen({ darkMode }) {
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "150ms" }} />
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
-        <p className={`mt-3 text-xs font-bold tracking-[0.2em] uppercase ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
+        <p className="mt-3 text-xs font-bold tracking-[0.2em] uppercase text-zinc-400">
           Loading Portal
         </p>
       </div>
@@ -48,22 +46,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
   const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setSplashDone(true), 2000);
     return () => clearTimeout(t);
   }, []);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("adminDarkMode", JSON.stringify(darkMode));
-  }, [darkMode]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -97,7 +86,7 @@ export default function LoginPage() {
 
   return (
     <>
-      {!splashDone && <SplashScreen darkMode={darkMode} />}
+      {!splashDone && <SplashScreen />}
       <div className={`relative min-h-screen flex items-center justify-center font-sans overflow-hidden p-4 transition-colors duration-500 ${
         darkMode ? "bg-[#080E1A] text-zinc-100" : "bg-zinc-50 text-zinc-900"
       }`}>
@@ -142,7 +131,7 @@ export default function LoginPage() {
                   className="relative w-16 h-16 sm:w-20 sm:h-20 object-contain"
                 />
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight">T's Pay Admin</h2>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight">T's Verify Admin</h2>
               <p className={`text-xs mt-1.5 text-center ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
                 Sign in to manage your payment network
               </p>

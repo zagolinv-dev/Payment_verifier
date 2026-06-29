@@ -11,8 +11,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load .env file
-  await dotenv.load(fileName: '.env');
+  // Load .env file (optional — fallbacks used if missing/empty)
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {}
+
+
 
   // Lock to portrait
   await SystemChrome.setPreferredOrientations([

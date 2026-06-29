@@ -8,7 +8,7 @@ import DashboardLayout from "../dashboard-layout";
 export default function ApprovalsPage() {
   const [merchants, setMerchants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
   const [reviewing, setReviewing] = useState(null);
   const [selected, setSelected] = useState(null);
   const [approveEmail, setApproveEmail] = useState("");
@@ -17,13 +17,7 @@ export default function ApprovalsPage() {
   const [settingPassword, setSettingPassword] = useState(false);
   const [approvedMerchant, setApprovedMerchant] = useState(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("adminDarkMode");
-    if (stored !== null) setDarkMode(JSON.parse(stored));
-    loadMerchants();
-  }, []);
-
-  useEffect(() => { localStorage.setItem("adminDarkMode", JSON.stringify(darkMode)); }, [darkMode]);
+  useEffect(() => { loadMerchants(); }, []);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });

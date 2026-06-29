@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:payment_verifier/data/datasources/supabase_bank_account_datasource.dart';
+import 'package:payment_verifier/data/datasources/supabase_notification_datasource.dart';
 import 'package:payment_verifier/data/repositories/bank_account_repository_impl.dart';
 import 'package:payment_verifier/domain/entities/bank_account_entity.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
@@ -64,6 +65,12 @@ class BankAccountNotifier
     try {
       final updated = await _repo.toggleActive(id, isActive);
       _replaceById(updated);
+      final account = await _repo.toggleActive(id, isActive);
+      await _notifDatasource.createNotification(
+        type: 'info',
+        title: isActive ? 'Bank Account Activated' : 'Bank Account Deactivated',
+        message: '${account.bankName} — ${account.holderName} is now ${isActive ? "active" : "inactive"}.',
+      );
       return true;
     } catch (_) {
       return false;

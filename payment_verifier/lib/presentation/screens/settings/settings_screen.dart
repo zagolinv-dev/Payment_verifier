@@ -133,52 +133,31 @@ class SettingsScreen extends ConsumerWidget {
               // ── About ─────────────────────────────────────────────────
               _SectionHeader(label: 'About', textSecondary: textSecondary),
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(16), border: Border.all(color: borderColor)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 44, height: 44,
-                          decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(12)),
-                          child: Center(child: Text('T', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white))),
-                        ),
-                        const SizedBox(width: 14),
-                        Column(
+              GestureDetector(
+                onTap: () => context.go(AppRoutes.about),
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(16), border: Border.all(color: borderColor)),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(12)),
+                        child: Center(child: Text('T', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white))),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text("T's Verify", style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: textPrimary)),
                             Text('Version 1.0.0', style: GoogleFonts.inter(fontSize: 12, color: textSecondary)),
                           ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Divider(color: borderColor, height: 1),
-                    const SizedBox(height: 14),
-                    Text(
-                      "T's Verify is an Ethiopian payment verification platform designed for cafés, restaurants, and service businesses.",
-                      style: GoogleFonts.inter(fontSize: 13, color: textSecondary, height: 1.5),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Waiters scan or enter reference codes from CBE, Telebirr, CBE Birr, and Awash Bank transfers. Every verified payment is recorded instantly with amount, tip, and waiter info — giving managers full visibility into daily revenue.',
-                      style: GoogleFonts.inter(fontSize: 13, color: textSecondary, height: 1.5),
-                    ),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 8, runSpacing: 8,
-                      children: [
-                        _AboutChip(label: 'CBE', color: AppTheme.primaryGreen),
-                        _AboutChip(label: 'Telebirr', color: AppTheme.accentGold),
-                        _AboutChip(label: 'CBE Birr', color: AppTheme.pending),
-                        _AboutChip(label: 'Awash Bank', color: AppTheme.success),
-                      ],
-                    ),
-                  ],
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: textSecondary, size: 22),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -648,25 +627,6 @@ class _SettingsTile extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _AboutChip extends StatelessWidget {
-  const _AboutChip({required this.label, required this.color});
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }
