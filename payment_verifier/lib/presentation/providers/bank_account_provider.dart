@@ -14,15 +14,27 @@ final bankAccountRepositoryProvider =
   return BankAccountRepositoryImpl(ref.watch(bankAccountDatasourceProvider));
 });
 
-final bankAccountsProvider =
-    FutureProvider.autoDispose<List<BankAccountEntity>>((ref) async {
-  final repo = ref.watch(bankAccountRepositoryProvider);
-  return repo.getBankAccounts();
-});
+// ── Single notifier that owns the list AND all CRUD operations ────────────────
 
-class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
-  BankAccountNotifier(this._repo) : super(const AsyncValue.data(null));
+class BankAccountNotifier
+    extends StateNotifier<AsyncValue<List<BankAccountEntity>>> {
+  BankAccountNotifier(this._repo) : super(const AsyncValue.loading()) {
+    _load();
+  }
+
   final BankAccountRepositoryImpl _repo;
+
+  Future<void> _load() async {
+    try {
+      final accounts = await _repo.getBankAccounts();
+      if (mounted) state = AsyncValue.data(accounts);
+    } catch (e, st) {
+      if (mounted) state = AsyncValue.error(e, st);
+    }
+  }
+
+  /// Pull-to-refresh: reload from server.
+  Future<void> reload() => _load();
 
   Future<bool> createAccount({
     required String holderName,
@@ -31,26 +43,27 @@ class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
     String? phone,
     String? notes,
   }) async {
-    state = const AsyncValue.loading();
     try {
-      await _repo.createBankAccount(
+      final created = await _repo.createBankAccount(
         holderName: holderName,
         bankName: bankName,
         accountNumber: accountNumber,
         phone: phone,
         notes: notes,
       );
-      state = const AsyncValue.data(null);
+      final current = state.valueOrNull ?? [];
+      if (mounted) state = AsyncValue.data([created, ...current]);
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) state = AsyncValue.error(e, st);
       return false;
     }
   }
 
   Future<bool> toggleActive(String id, bool isActive) async {
     try {
-      await _repo.toggleActive(id, isActive);
+      final updated = await _repo.toggleActive(id, isActive);
+      _replaceById(updated);
       return true;
     } catch (_) {
       return false;
@@ -65,9 +78,8 @@ class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
     String? phone,
     String? notes,
   }) async {
-    state = const AsyncValue.loading();
     try {
-      await _repo.updateBankAccount(
+      final updated = await _repo.updateBankAccount(
         id: id,
         holderName: holderName,
         bankName: bankName,
@@ -75,10 +87,9 @@ class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
         phone: phone,
         notes: notes,
       );
-      state = const AsyncValue.data(null);
+      _replaceById(updated);
       return true;
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+    } catch (_) {
       return false;
     }
   }
@@ -86,15 +97,34 @@ class BankAccountNotifier extends StateNotifier<AsyncValue<void>> {
   Future<bool> deleteAccount(String id) async {
     try {
       await _repo.deleteBankAccount(id);
+      final current = state.valueOrNull ?? [];
+      if (mounted) {
+        state = AsyncValue.data(current.where((a) => a.id != id).toList());
+      }
       return true;
     } catch (_) {
       return false;
     }
   }
+
+  void _replaceById(BankAccountEntity updated) {
+    final current = state.valueOrNull ?? [];
+    if (mounted) {
+      state = AsyncValue.data(
+        current.map((a) => a.id == updated.id ? updated : a).toList(),
+      );
+    }
+  }
 }
 
-final bankAccountNotifierProvider =
-    StateNotifierProvider.autoDispose<BankAccountNotifier, AsyncValue<void>>(
-        (ref) {
+/// The one provider the whole app uses.
+final bankAccountNotifierProvider = StateNotifierProvider<BankAccountNotifier,
+    AsyncValue<List<BankAccountEntity>>>((ref) {
   return BankAccountNotifier(ref.watch(bankAccountRepositoryProvider));
+});
+
+/// Convenience alias so widgets can watch the list directly.
+final bankAccountsProvider =
+    Provider<AsyncValue<List<BankAccountEntity>>>((ref) {
+  return ref.watch(bankAccountNotifierProvider);
 });

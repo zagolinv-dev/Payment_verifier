@@ -82,4 +82,8 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<void> clearAllTransactions() =>
       _datasource.clearAllTransactions();
+
+  @override
+  Future<void> deleteTransaction(String id) =>
+      _datasource.deleteTransaction(id);
 }
