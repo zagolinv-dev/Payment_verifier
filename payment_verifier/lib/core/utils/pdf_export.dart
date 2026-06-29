@@ -136,7 +136,7 @@ class ReceiptPdfExport {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      scannerName,
+                      _safe(scannerName),
                       style: pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
@@ -183,9 +183,6 @@ class ReceiptPdfExport {
                   ),
                   for (int i = 0; i < txs.length; i++)
                     pw.TableRow(
-                      decoration: txs[i].tip > 0
-                          ? const pw.BoxDecoration(color: PdfColor.fromInt(0xFFFFFDE7)) // light amber tint for rows with tips
-                          : null,
                       children: [
                         _cell('${i + 1}'),
                         _cell(txs[i].buyerName),
@@ -196,9 +193,7 @@ class ReceiptPdfExport {
                             ? '...${txs[i].referenceCode.substring(txs[i].referenceCode.length - 8)}'
                             : txs[i].referenceCode),
                         _cell(_pdfMoney(txs[i].amount)),
-                        txs[i].tip > 0
-                            ? _tipCell(_pdfMoney(txs[i].tip))
-                            : _cell('-'),
+                        _tipCell(txs[i].tip > 0 ? _pdfMoney(txs[i].tip) : '-'),
                         _cell(AppFormatters.formatDateShort(txs[i].createdAt)),
                       ],
                     ),
@@ -255,19 +250,19 @@ class ReceiptPdfExport {
                                 ),
                                 pw.SizedBox(height: 3),
                                 pw.Text(
-                                  tx.referenceCode,
+                                  _safe(tx.referenceCode),
                                   style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
                                   textAlign: pw.TextAlign.center,
                                 ),
                                 pw.Text(
-                                  _pdfMoney(tx.amount),
+                                  _safe(_pdfMoney(tx.amount)),
                                   style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
                                   textAlign: pw.TextAlign.center,
                                 ),
                                 if (tx.tip > 0)
                                   pw.Text(
-                                    '+${_pdfMoney(tx.tip)} tip',
-                                    style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.amber),
+                                    _safe('+${_pdfMoney(tx.tip)} tip'),
+                                    style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
                                     textAlign: pw.TextAlign.center,
                                   ),
                                 pw.SizedBox(height: 3),
@@ -398,6 +393,14 @@ class ReceiptPdfExport {
     return pdf.save();
   }
 
+  /// Strip non-ASCII characters so the default PDF font always renders cleanly.
+  static String _safe(String s) =>
+      s.replaceAll(RegExp(r'[^\x00-\x7F]'), '?');
+
+  static String _pdfDateTime(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
+      '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+
   /// Plain ASCII currency format safe for PDF rendering (no locale-specific symbols)
   static String _pdfMoney(double amount) {
     return 'Br ${amount.toStringAsFixed(2)}';
@@ -407,7 +410,7 @@ class ReceiptPdfExport {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
-        text,
+        _safe(text),
         style: pw.TextStyle(
           fontSize: 9,
           fontWeight: pw.FontWeight.bold,
@@ -421,22 +424,22 @@ class ReceiptPdfExport {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(5),
       child: pw.Text(
-        text,
+        _safe(text),
         style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800),
       ),
     );
   }
 
-  /// Tip cell — amber text so tips are visually distinct
+  /// Tip cell — bold so tips are visually distinct
   static pw.Widget _tipCell(String text) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(5),
       child: pw.Text(
-        text,
+        _safe(text),
         style: pw.TextStyle(
           fontSize: 8,
           fontWeight: pw.FontWeight.bold,
-          color: PdfColors.amber,
+          color: PdfColors.grey800,
         ),
       ),
     );
