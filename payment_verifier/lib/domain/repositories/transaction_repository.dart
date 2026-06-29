@@ -1,11 +1,12 @@
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 
 abstract class TransactionRepository {
-  /// Fetch all transactions (Admin) or own transactions (Waitress)
+  /// Fetch all transactions — pass [userId] to scope to a single waiter
   Future<List<TransactionEntity>> getTransactions({
     String? statusFilter,
     String? bankFilter,
     String? searchQuery,
+    String? userId,
   });
 
   /// Fetch recent N transactions — pass [userId] to scope to a single waiter

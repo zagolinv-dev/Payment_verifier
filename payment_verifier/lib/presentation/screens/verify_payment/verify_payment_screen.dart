@@ -11,6 +11,7 @@ import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/core/utils/formatters.dart';
 import 'package:payment_verifier/data/services/ocr_service.dart';
 import 'package:payment_verifier/data/services/verification_service.dart';
+import 'package:payment_verifier/presentation/providers/connectivity_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/bank_account_provider.dart';
 import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
@@ -148,11 +149,6 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     }
   }
 
-  String _monthAbbr(int m) => [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ][m - 1];
-
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final isDark = ref.read(themeProvider) == ThemeMode.dark;
@@ -217,11 +213,8 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
         } else {
           debugPrint('[PickImage] upload failed, using local path');
         }
-        final now = DateTime.now();
-        final h = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
-        final ampm = now.hour >= 12 ? 'PM' : 'AM';
-        final dateStr = '${_monthAbbr(now.month)} ${now.day}, ${now.year} $h:${now.minute.toString().padLeft(2, '0')} $ampm';
-        ref.read(verifyProvider.notifier).setTransactionDate(dateStr);
+        // Do NOT pre-set the date here — let OCR extract the actual receipt date.
+        // The scan time is passed separately at verify() time via DateTime.now().
         _processOcr(localPath);
       } else {
         debugPrint('[PickImage] file was null or not mounted (mounted=$mounted)');
@@ -483,6 +476,9 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
     final bankAccountsAsync = ref.watch(bankAccountsProvider);
+    final connectivity = ref.watch(connectivityProvider);
+    // Show banner only when fully offline — slow connection doesn't block OCR
+    final isOffline = connectivity.quality == ConnectionQuality.none;
 
     final bg = isDark ? AppTheme.bgDark : AppTheme.lightBg;
     final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
@@ -494,13 +490,35 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     return Scaffold(
       backgroundColor: bg,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        child: Column(
+          children: [
+            // Connectivity warning — only shown here, only when fully offline
+            if (isOffline)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                color: AppTheme.error,
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'No internet — receipt scanning requires a connection',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                 const SizedBox(height: 8),
                 Text(
                   'Scan and verify a customer payment receipt',
@@ -724,8 +742,11 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
             ),
           ),
         ),
-      ),
-    );
+            ), // Expanded
+          ], // Column children
+        ), // Column
+      ), // SafeArea
+    ); // Scaffold
   }
 }
 

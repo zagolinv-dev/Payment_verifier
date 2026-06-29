@@ -85,7 +85,7 @@ class ReceiptPdfExport {
               ),
             ),
             pw.Text(
-              'Generated: ${AppFormatters.formatDateTime(DateTime.now())}',
+              'Generated: ${_pdfDateTime(DateTime.now())}',
               style: const pw.TextStyle(
                 fontSize: 10,
                 color: PdfColors.grey400,
@@ -160,13 +160,13 @@ class ReceiptPdfExport {
               pw.Table(
                 border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
                 columnWidths: {
-                  0: const pw.FixedColumnWidth(24),
-                  1: const pw.FixedColumnWidth(80),
-                  2: const pw.FixedColumnWidth(60),
-                  3: const pw.FixedColumnWidth(80),
-                  4: const pw.FixedColumnWidth(60),
-                  5: const pw.FixedColumnWidth(40),
-                  6: const pw.FixedColumnWidth(80),
+                  0: const pw.FixedColumnWidth(20),
+                  1: const pw.FixedColumnWidth(76),
+                  2: const pw.FixedColumnWidth(52),
+                  3: const pw.FixedColumnWidth(72),
+                  4: const pw.FixedColumnWidth(56),
+                  5: const pw.FixedColumnWidth(52),  // Tip — wider so values don't truncate
+                  6: const pw.FixedColumnWidth(68),
                 },
                 children: [
                   pw.TableRow(
@@ -183,6 +183,9 @@ class ReceiptPdfExport {
                   ),
                   for (int i = 0; i < txs.length; i++)
                     pw.TableRow(
+                      decoration: txs[i].tip > 0
+                          ? const pw.BoxDecoration(color: PdfColor.fromInt(0xFFFFFDE7)) // light amber tint for rows with tips
+                          : null,
                       children: [
                         _cell('${i + 1}'),
                         _cell(txs[i].buyerName),
@@ -192,8 +195,10 @@ class ReceiptPdfExport {
                         _cell(txs[i].referenceCode.length > 10
                             ? '...${txs[i].referenceCode.substring(txs[i].referenceCode.length - 8)}'
                             : txs[i].referenceCode),
-                        _cell(AppFormatters.formatETB(txs[i].amount)),
-                        _cell(txs[i].tip > 0 ? AppFormatters.formatETB(txs[i].tip) : '—'),
+                        _cell(_pdfMoney(txs[i].amount)),
+                        txs[i].tip > 0
+                            ? _tipCell(_pdfMoney(txs[i].tip))
+                            : _cell('-'),
                         _cell(AppFormatters.formatDateShort(txs[i].createdAt)),
                       ],
                     ),
@@ -255,10 +260,16 @@ class ReceiptPdfExport {
                                   textAlign: pw.TextAlign.center,
                                 ),
                                 pw.Text(
-                                  AppFormatters.formatETB(tx.amount),
+                                  _pdfMoney(tx.amount),
                                   style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
                                   textAlign: pw.TextAlign.center,
                                 ),
+                                if (tx.tip > 0)
+                                  pw.Text(
+                                    '+${_pdfMoney(tx.tip)} tip',
+                                    style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.amber),
+                                    textAlign: pw.TextAlign.center,
+                                  ),
                                 pw.SizedBox(height: 3),
                               ],
                             ),
@@ -290,21 +301,41 @@ class ReceiptPdfExport {
             pages.add(pw.SizedBox(height: 6));
             pages.add(
               pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.green50,
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  border: pw.Border.all(color: PdfColors.green200, width: 0.5),
                 ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.end,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text(
-                      'Subtotal: ${AppFormatters.formatETB(scannerAmount)}  |  Tips: ${AppFormatters.formatETB(scannerTips)}',
-                      style: pw.TextStyle(
-                        fontSize: 11,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.green800,
-                      ),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Revenue:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                        pw.Text(_pdfMoney(scannerAmount), style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+                      ],
+                    ),
+                    pw.SizedBox(height: 3),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Tips:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                        pw.Text(
+                          scannerTips > 0 ? _pdfMoney(scannerTips) : '-',
+                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.amber),
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 3),
+                    pw.Divider(thickness: 0.5, color: PdfColors.green300),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Total (incl. tips):', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+                        pw.Text(_pdfMoney(scannerAmount + scannerTips), style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
+                      ],
                     ),
                   ],
                 ),
@@ -338,16 +369,16 @@ class ReceiptPdfExport {
                     style: pw.TextStyle(fontSize: 11, color: PdfColors.white),
                   ),
                   pw.Text(
-                    'Total Revenue: ${AppFormatters.formatETB(grandTotalAmount)}',
+                    'Total Revenue: ${_pdfMoney(grandTotalAmount)}',
                     style: pw.TextStyle(fontSize: 13, color: PdfColors.white),
                   ),
                   pw.Text(
-                    'Total Tips: ${AppFormatters.formatETB(grandTotalTips)}',
+                    'Total Tips: ${_pdfMoney(grandTotalTips)}',
                     style: pw.TextStyle(fontSize: 13, color: PdfColors.amberAccent),
                   ),
                   pw.SizedBox(height: 4),
                   pw.Text(
-                    'Grand Total (Revenue + Tips): ${AppFormatters.formatETB(grandTotalAmount + grandTotalTips)}',
+                    'Grand Total (Revenue + Tips): ${_pdfMoney(grandTotalAmount + grandTotalTips)}',
                     style: pw.TextStyle(
                       fontSize: 14,
                       fontWeight: pw.FontWeight.bold,
@@ -365,6 +396,11 @@ class ReceiptPdfExport {
     );
 
     return pdf.save();
+  }
+
+  /// Plain ASCII currency format safe for PDF rendering (no locale-specific symbols)
+  static String _pdfMoney(double amount) {
+    return 'Br ${amount.toStringAsFixed(2)}';
   }
 
   static pw.Widget _headerCell(String text) {
@@ -387,6 +423,21 @@ class ReceiptPdfExport {
       child: pw.Text(
         text,
         style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800),
+      ),
+    );
+  }
+
+  /// Tip cell — amber text so tips are visually distinct
+  static pw.Widget _tipCell(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(5),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 8,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.amber,
+        ),
       ),
     );
   }
@@ -425,7 +476,7 @@ class ReceiptPdfExport {
   }) async {
     final grouped = _groupByScanner(transactions, scannerIdToName);
     final pdfBytes = await _buildPdf(
-      title: 'All Receipts Export — 7+ Days Report',
+      title: 'All Receipts Export - 7+ Days Report',
       grouped: grouped,
     );
     await Printing.sharePdf(
@@ -440,7 +491,7 @@ class ReceiptPdfExport {
   }) async {
     final grouped = {waiterName: transactions};
     final pdfBytes = await _buildPdf(
-      title: 'Scanned Receipts — $waiterName',
+      title: 'Scanned Receipts - $waiterName',
       grouped: grouped,
     );
     await Printing.sharePdf(

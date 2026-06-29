@@ -14,13 +14,15 @@ class SupabaseTransactionDatasource {
     String? statusFilter,
     String? bankFilter,
     String? searchQuery,
+    String? userId,
   }) async {
-    var query = _client
+    // Filters must be applied before transform operations (order)
+    final base = _client
         .from(AppConstants.transactionsTable)
-        .select()
-        .order('created_at', ascending: false);
+        .select();
+    final baseFiltered = userId != null ? base.eq('verified_by', userId) : base;
+    final response = await baseFiltered.order('created_at', ascending: false);
 
-    final response = await query;
     var transactions = (response as List)
         .map((e) => TransactionModel.fromJson(e as Map<String, dynamic>))
         .toList();

@@ -257,8 +257,16 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           itemCount: txs.length,
                           itemBuilder: (ctx, i) {
                             final tx = txs[i];
+                            // Resolve waiter name for admin view
+                            String? waiterName;
+                            if (isAdmin && tx.verifiedBy != null) {
+                              final users = ref.watch(usersListProvider).valueOrNull ?? [];
+                              final match = users.where((u) => u.id == tx.verifiedBy).firstOrNull;
+                              waiterName = match?.displayName ?? tx.verifiedBy!.substring(0, 8);
+                            }
                             final tile = TransactionListItem(
                               transaction: tx,
+                              verifiedByName: waiterName,
                               onDelete: isAdmin
                                   ? () => _confirmDeleteTransaction(context, ref, txs[i])
                                   : null,

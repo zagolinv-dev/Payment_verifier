@@ -14,11 +14,14 @@ class TransactionListItem extends ConsumerWidget {
     required this.transaction,
     this.onTap,
     this.onDelete,
+    this.verifiedByName,
   });
 
   final TransactionEntity transaction;
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
+  /// When non-null (admin view), displayed as a small "by NAME" label
+  final String? verifiedByName;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -111,6 +114,20 @@ class TransactionListItem extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  if (verifiedByName != null) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Icon(Icons.person_outline_rounded, size: 11, color: AppTheme.primaryGreen.withOpacity(0.7)),
+                        const SizedBox(width: 3),
+                        Text(
+                          verifiedByName!,
+                          style: GoogleFonts.inter(fontSize: 11, color: AppTheme.primaryGreen.withOpacity(0.85), fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

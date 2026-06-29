@@ -72,10 +72,14 @@ final transactionsProvider =
     FutureProvider.autoDispose<List<TransactionEntity>>((ref) async {
   final filters = ref.watch(transactionFiltersProvider);
   final repo = ref.watch(transactionRepositoryProvider);
+  final user = ref.watch(currentUserProvider);
+  // Waiters only see their own transactions; admins see all
+  final userId = (user != null && !user.isAdmin) ? user.id : null;
   return repo.getTransactions(
     statusFilter: filters.status,
     bankFilter: filters.bank,
     searchQuery: filters.search.isEmpty ? null : filters.search,
+    userId: userId,
   );
 });
 

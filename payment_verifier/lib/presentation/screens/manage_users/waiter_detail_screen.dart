@@ -10,17 +10,19 @@ import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
-import 'package:payment_verifier/presentation/providers/user_provider.dart';
-import 'package:payment_verifier/presentation/widgets/status_chip.dart';
+import 'package:payment_verifier/presentation/providers/user_provider.dart';import 'package:payment_verifier/presentation/widgets/status_chip.dart';
 import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 final waiterTransactionsProvider =
     FutureProvider.family<List<TransactionEntity>, String>((ref, waiterId) async {
-  final allTxs = await ref.watch(transactionsProvider.future);
-  return allTxs
-      .where((tx) => tx.verifiedBy == waiterId && tx.status == TransactionStatus.verified)
+  // Query directly filtered by waiterId — does NOT depend on transactionsProvider
+  // so the admin's global view doesn't bleed through.
+  final repo = ref.read(transactionRepositoryProvider);
+  final txs = await repo.getTransactions(userId: waiterId);
+  return txs
+      .where((tx) => tx.status == TransactionStatus.verified)
       .toList()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 });

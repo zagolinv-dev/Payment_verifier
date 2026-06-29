@@ -9,7 +9,6 @@ import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/notification_provider.dart';
 import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
-import 'package:payment_verifier/presentation/widgets/connectivity_banner.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.child});
@@ -153,7 +152,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       ),
       body: Column(
         children: [
-          const ConnectivityBanner(),
           Expanded(child: widget.child),
         ],
       ),
