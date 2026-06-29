@@ -46,10 +46,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => typeof window !== "undefined" ? JSON.parse(localStorage.getItem("adminDarkMode") ?? "false") : false);
+  const [darkMode, setDarkMode] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
+    const stored = JSON.parse(localStorage.getItem("adminDarkMode") ?? "false");
+    setDarkMode(stored);
     const t = setTimeout(() => setSplashDone(true), 2000);
     return () => clearTimeout(t);
   }, []);
@@ -82,6 +86,29 @@ export default function LoginPage() {
     }
 
     router.push("/dashboard");
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.includes("@")) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    setResetLoading(true);
+    setError("");
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+    });
+
+    setResetLoading(false);
+
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+
+    setResetSent(true);
   };
 
   return (
@@ -186,6 +213,25 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
+
+              <div className="flex justify-end -mt-3">
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={resetLoading}
+                  className={`text-[11px] font-semibold tracking-wide transition-colors cursor-pointer ${
+                    darkMode ? "text-emerald-400 hover:text-emerald-300" : "text-emerald-600 hover:text-emerald-500"
+                  } disabled:opacity-50`}
+                >
+                  {resetLoading ? "Sending..." : "Forgot Password?"}
+                </button>
+              </div>
+
+              {resetSent && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium animate-scaleIn">
+                  Password reset link sent to your email.
+                </div>
+              )}
 
               {error && (
                 <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium animate-scaleIn">
