@@ -330,6 +330,14 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
     final refCode = state.referenceCode;
     final bank = state.selectedBank ?? 'Telebirr';
 
+    String? imageUrl;
+    if (state.receiptImage != null && state.receiptImage!.startsWith('http')) {
+      imageUrl = state.receiptImage;
+    } else if (state.receiptImage != null) {
+      final uploaded = await _txDatasource.uploadReceiptImage(state.receiptImage!);
+      if (uploaded != null) imageUrl = uploaded;
+    }
+
     final existingTxs = await _repo.getTransactions();
     final fraudAnalysis = analyzeFraudRisk(
       amount: state.amount,
@@ -346,7 +354,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
       buyerName: state.buyerName.isEmpty ? 'Unknown Buyer' : state.buyerName,
       amount: state.amount,
       tip: state.tip,
-      imageUrl: state.receiptImage,
+      imageUrl: imageUrl,
       riskScore: fraudAnalysis.riskScore,
       riskFlags: fraudAnalysis.flags,
       orderTotal: state.orderTotal,
