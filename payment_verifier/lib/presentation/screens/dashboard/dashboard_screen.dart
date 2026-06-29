@@ -379,12 +379,29 @@ Future<void> _showCleanupDialog(BuildContext context, WidgetRef ref, List<Transa
       scannerIdToName: scannerIds,
     );
 
+    if (isAdmin) {
+      final repo = ref.read(transactionRepositoryProvider);
+      for (final tx in oldTxs) {
+        try {
+          await repo.deleteTransaction(tx.id);
+        } catch (_) {}
+      }
+      try {
+        await ref.read(createNotificationProvider)(
+          type: 'info',
+          title: 'Weekly Cleanup Complete',
+          message: '${oldTxs.length} receipt${oldTxs.length > 1 ? 's' : ''} older than 7 days exported and deleted.',
+        );
+      } catch (_) {}
+    }
+
     if (context.mounted) {
       ref.invalidate(dashboardMetricsProvider);
       ref.invalidate(recentTransactionsProvider);
+      ref.invalidate(transactionsProvider);
       final msg = isAdmin
-          ? '${oldTxs.length} old receipt${oldTxs.length > 1 ? 's' : ''} exported.'
-          : 'PDF exported. Manager will review for deletion.';
+          ? '${oldTxs.length} old receipt${oldTxs.length > 1 ? 's' : ''} exported and deleted.'
+          : 'PDF exported. Manager will be notified for deletion.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(msg),
