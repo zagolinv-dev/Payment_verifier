@@ -279,6 +279,12 @@ class OcrService {
         .firstMatch(text);
     if (debited != null) return _money(debited.group(1));
 
+    // CBE SMS format: "Completed ETB60.61 transfer" (no space between ETB and amount)
+    final completedEtb = RegExp(r'[Cc]ompleted\s+ETB\s*([\d,]+(?:\.\d{1,2})?)\s+transfer',
+            caseSensitive: false)
+        .firstMatch(text);
+    if (completedEtb != null) return _money(completedEtb.group(1));
+
     // CBE old format: "transferred 3000 ETB"
     final transferred = RegExp(r'transferred\s+(?:ETB\s*)?([\d,]+(?:\.\d{1,2})?)',
             caseSensitive: false)
@@ -342,9 +348,18 @@ class OcrService {
   }
 
   String? _cbeReceiverName(String text) {
+    // App receipt: "for Arsema Tsegaye Mehari ETB-6517"
     final m = RegExp(r'\bfor\s+([A-Za-z][A-Za-z .]{2,40}?)\s+ETB-?\d', caseSensitive: false)
         .firstMatch(text);
     if (m != null) return _cleanName(m.group(1));
+
+    // SMS format: "transfer From [Sender] to [Receiver Name]-[digits]"
+    // e.g. "Completed ETB60.61 transfer From Eden Belayineh Ayalew to Getu Tesfaye Abayneh-3735"
+    final sms = RegExp(
+      r'\btransfer\s+[Ff]rom\s+[A-Za-z][A-Za-z .]{2,50}?\s+to\s+([A-Za-z][A-Za-z .]{2,50}?)\s*-\s*\d',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (sms != null) return _cleanName(sms.group(1));
 
     final m2 = RegExp(
       r'(?:beneficiary\s+name|receiver\s+name|transfer\s+to\s+name|credited\s+to\s+name|to\s+name)\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,40}?)',
@@ -354,9 +369,18 @@ class OcrService {
   }
 
   String? _cbeReceiverAccount(String text) {
+    // App receipt: "for Name ETB-6517"
     final m = RegExp(r'\bfor\s+[A-Za-z .]+?\s+ETB-?(\d{3,})', caseSensitive: false)
         .firstMatch(text);
     if (m != null) return m.group(1);
+
+    // SMS format: "to Receiver Name Surname-3735"
+    // e.g. "to Getu Tesfaye Abayneh-3735"
+    final sms = RegExp(
+      r'\btransfer\s+[Ff]rom\s+[A-Za-z][A-Za-z .]{2,50}?\s+to\s+[A-Za-z][A-Za-z .]{2,50?}-(\d{3,})',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (sms != null) return sms.group(1);
 
     final m2 = RegExp(
       r'(?:beneficiary\s+account|receiver\s+account|credit\s+account|to\s+account|transfer\s+to\s+account)\s*[:\-]?\s*([0-9*xX\u2022\u25CF\u25AA]{6,})',
@@ -876,6 +900,17 @@ String? extractCustomerName(String text,
       final n = tryName(lblRe.group(1));
       if (n != null) return n;
     }
+
+    // CBE SMS: "Completed ETB60.61 transfer From Eden Belayineh Ayalew to ..."
+    final smsSender = RegExp(
+      r'[Cc]ompleted\s+ETB[\d,]+(?:\.\d{1,2})?\s+transfer\s+[Ff]rom\s+([A-Za-z][A-Za-z .]{2,60}?)\s+to\s+[A-Za-z]',
+      caseSensitive: false,
+    ).firstMatch(flat);
+    if (smsSender != null) {
+      final n = tryName(smsSender.group(1)?.trim());
+      if (n != null) return n;
+    }
+
     return null;
   }
 

@@ -8,8 +8,8 @@ abstract class TransactionRepository {
     String? searchQuery,
   });
 
-  /// Fetch recent N transactions
-  Future<List<TransactionEntity>> getRecentTransactions({int limit = 5});
+  /// Fetch recent N transactions — pass [userId] to scope to a single waiter
+  Future<List<TransactionEntity>> getRecentTransactions({int limit = 5, String? userId});
 
   /// Submit a new payment verification
   Future<TransactionEntity> createTransaction({
@@ -25,20 +25,20 @@ abstract class TransactionRepository {
     String status = 'VERIFIED',
   });
 
-  /// Get aggregated dashboard metrics
-  Future<DashboardMetrics> getDashboardMetrics();
+  /// Get aggregated dashboard metrics — pass [userId] to scope to a single waiter
+  Future<DashboardMetrics> getDashboardMetrics({String? userId});
 
   /// Get total income
-  Future<double> getTotalIncome();
+  Future<double> getTotalIncome({String? userId});
 
   /// Get total tips
-  Future<double> getTotalTips();
+  Future<double> getTotalTips({String? userId});
 
   /// Count verified and failed today
-  Future<({int verified, int failed})> getTodayVerificationCounts();
+  Future<({int verified, int failed})> getTodayVerificationCounts({String? userId});
 
   /// Today's summary total
-  Future<({double total, int count})> getTodaySummary();
+  Future<({double total, int count})> getTodaySummary({String? userId});
 
   /// Weekly totals grouped by day (Mon-Sun)
   Future<Map<String, double>> getWeeklyTotals();
