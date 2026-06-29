@@ -212,9 +212,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
           debugPrint('[PickImage] uploaded to storage: $receiptUrl');
           ref.read(verifyProvider.notifier).setReceiptImage(receiptUrl);
         } else {
-          // Fallback to local path if upload fails
-          debugPrint('[PickImage] upload failed, using local path');
-          ref.read(verifyProvider.notifier).setReceiptImage(localPath);
+          debugPrint('[PickImage] upload failed, will retry at save');
         }
         final now = DateTime.now();
         final h = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);

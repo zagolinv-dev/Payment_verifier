@@ -291,7 +291,7 @@ class _NotificationTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${item.createdAt.hour.toString().padLeft(2, '0')}:${item.createdAt.minute.toString().padLeft(2, '0')}  ·  ${item.amount.toStringAsFixed(0)} ETB',
+                    '${item.createdAt.hour.toString().padLeft(2, '0')}:${item.createdAt.minute.toString().padLeft(2, '0')}',
                     style: GoogleFonts.inter(fontSize: 11, color: textSecondary.withOpacity(0.6)),
                   ),
                 ],

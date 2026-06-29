@@ -200,13 +200,30 @@ class TransactionListItem extends StatelessWidget {
     );
   }
 
-  void _showReceipt(BuildContext context) {
+  Future<void> _showReceipt(BuildContext context) async {
     if (transaction.receiptImage == null) return;
     final path = transaction.receiptImage!;
-    debugPrint('[TransactionListItem] _showReceipt path: $path');
+
+    final isUrl = path.startsWith('http://') || path.startsWith('https://');
+    if (!isUrl) {
+      final file = File(path);
+      if (!await file.exists()) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Receipt image was saved locally and is no longer available.'),
+            backgroundColor: AppTheme.error.withOpacity(0.9),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
+    }
 
     final imageWidget = _buildReceiptImage(path);
 
+    if (!context.mounted) return;
     showBlurredDialog(
       context: context,
       builder: (ctx) => Dialog(
