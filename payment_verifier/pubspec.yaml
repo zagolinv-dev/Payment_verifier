@@ -68,7 +68,7 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/images/T_s_verify_logo.png"
-  adaptive_icon_background: "#0F4A35"
+  adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/images/icon_foreground.png"
   remove_alpha_ios: true
 
