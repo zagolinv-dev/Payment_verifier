@@ -1,4 +1,4 @@
-package com.example.payment_verifier
+package com.tsverify.app
 
 import io.flutter.embedding.android.FlutterActivity
 

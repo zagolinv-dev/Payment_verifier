@@ -37,17 +37,35 @@ export default function CompaniesPage() {
 
   const handleToggleStatus = async (id, currentStatus) => {
     const newRole = currentStatus === "ACTIVE" ? "WAITRESS" : "ADMIN";
-    const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", id);
-    if (error) { showToast(error.message, "error"); return; }
-    setCompanies((prev) => prev.map((c) => (c.id === id ? { ...c, status: newRole === "ADMIN" ? "ACTIVE" : "SUSPENDED" } : c)));
-    showToast(newRole === "ADMIN" ? "Company re-activated." : "Company suspended.", newRole === "ADMIN" ? "success" : "warning");
+    try {
+      const res = await fetch("/api/update-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: id, role: newRole }),
+      });
+      const result = await res.json();
+      if (!res.ok) { showToast(result.error || "Failed to update company role", "error"); return; }
+      await loadData();
+      showToast(newRole === "ADMIN" ? "Company re-activated." : "Company suspended.", newRole === "ADMIN" ? "success" : "warning");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
   };
 
   const handleDelete = async (id, name) => {
-    const { error } = await supabase.from("profiles").delete().eq("id", id);
-    if (error) { showToast(error.message, "error"); return; }
-    setCompanies((prev) => prev.filter((c) => c.id !== id));
-    showToast(`${name} removed from platform.`, "error");
+    try {
+      const res = await fetch("/api/delete-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: id }),
+      });
+      const result = await res.json();
+      if (!res.ok) { showToast(result.error || "Failed to delete company", "error"); return; }
+      await loadData();
+      showToast(`${name} removed from platform.`, "error");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
   };
 
   const filtered = companies.filter(
