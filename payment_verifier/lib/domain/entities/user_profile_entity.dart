@@ -9,6 +9,7 @@ class UserProfileEntity extends Equatable {
     required this.email,
     this.fullName,
     this.avatarUrl,
+    this.ownerId,
     this.role = UserRole.waitress,
     required this.createdAt,
   });
@@ -17,6 +18,7 @@ class UserProfileEntity extends Equatable {
   final String email;
   final String? fullName;
   final String? avatarUrl;
+  final String? ownerId;
   final UserRole role;
   final DateTime createdAt;
 
@@ -25,5 +27,5 @@ class UserProfileEntity extends Equatable {
   String get displayName => fullName ?? email.split('@').first;
 
   @override
-  List<Object?> get props => [id, email, fullName, avatarUrl, role, createdAt];
+  List<Object?> get props => [id, email, fullName, avatarUrl, ownerId, role, createdAt];
 }

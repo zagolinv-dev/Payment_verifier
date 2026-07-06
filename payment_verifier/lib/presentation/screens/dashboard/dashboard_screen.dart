@@ -43,7 +43,6 @@ class DashboardScreen extends ConsumerWidget {
     final textTertiary = isDark ? AppTheme.textTertiary : AppTheme.lightTextTertiary;
 
     final hasShownCleanup = ref.watch(_hasShownCleanupProvider);
-    final allTxsAsync = ref.watch(transactionsProvider);
     if (!hasShownCleanup && isAdmin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;

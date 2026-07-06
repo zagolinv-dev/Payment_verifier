@@ -4,7 +4,6 @@ import 'package:payment_verifier/data/datasources/supabase_auth_datasource.dart'
 import 'package:payment_verifier/data/datasources/supabase_user_datasource.dart';
 import 'package:payment_verifier/domain/entities/user_profile_entity.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
-import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final userDatasourceProvider = Provider<SupabaseUserDatasource>((ref) {
@@ -14,7 +13,9 @@ final userDatasourceProvider = Provider<SupabaseUserDatasource>((ref) {
 final usersListProvider =
     FutureProvider.autoDispose<List<UserProfileEntity>>((ref) async {
   final ds = ref.watch(userDatasourceProvider);
-  return ds.getAllUsers();
+  final user = ref.watch(currentUserProvider);
+  final scopeOwnerId = user == null ? null : (user.ownerId ?? user.id);
+  return ds.getAllUsers(ownerId: scopeOwnerId);
 });
 
 class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
@@ -23,7 +24,8 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> updateRole(String userId, String roleStr) async {
     try {
-      await _ds.updateUserRole(userId, roleStr);
+      final scopeOwnerId = _scopeOwnerId;
+      await _ds.updateUserRole(userId, roleStr, ownerId: scopeOwnerId);
       return true;
     } catch (_) {
       return false;
@@ -37,7 +39,14 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
   }) async {
     try {
       final authDs = SupabaseAuthDatasource(Supabase.instance.client);
-      await authDs.signUp(email: email, password: password, fullName: fullName, role: 'WAITRESS');
+      final ownerId = Supabase.instance.client.auth.currentUser?.id;
+      await authDs.signUp(
+        email: email,
+        password: password,
+        fullName: fullName,
+        role: 'WAITRESS',
+        ownerId: ownerId,
+      );
       return null;
     } catch (e) {
       debugPrint('[addWaiter Error] $e');
@@ -47,7 +56,7 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> deleteUser(String userId) async {
     try {
-      await _ds.deleteUser(userId);
+      await _ds.deleteUser(userId, ownerId: _scopeOwnerId);
       return true;
     } catch (_) {
       return false;
@@ -65,6 +74,12 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
       await Future.delayed(const Duration(milliseconds: 300));
       return false;
     }
+  }
+
+  String? get _scopeOwnerId {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return null;
+    return user.id;
   }
 }
 

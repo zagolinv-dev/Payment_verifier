@@ -7,6 +7,7 @@ class UserProfileModel extends UserProfileEntity {
     required super.email,
     super.fullName,
     super.avatarUrl,
+    super.ownerId,
     super.role,
     required super.createdAt,
   });
@@ -17,6 +18,7 @@ class UserProfileModel extends UserProfileEntity {
       email: json['email'] as String? ?? '',
       fullName: json['full_name'] as String?,
       avatarUrl: json['avatar_url'] as String?,
+      ownerId: json['owner_id'] as String?,
       role: UserRole.fromString(json['role'] as String? ?? 'WAITRESS'),
       createdAt: DateTime.parse(
         json['created_at'] as String? ?? DateTime.now().toIso8601String(),
@@ -28,6 +30,7 @@ class UserProfileModel extends UserProfileEntity {
     return {
       'full_name': fullName,
       'avatar_url': avatarUrl,
+      'owner_id': ownerId,
       'role': role.value,
     };
   }

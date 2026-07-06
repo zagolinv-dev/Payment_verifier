@@ -122,8 +122,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     setState(() => _isLoadingSignUp = true);
     try {
       final supabase = ref.read(supabaseClientProvider);
+      final applicationId = _generateUuid();
       await supabase.from(AppConstants.profilesTable).insert({
-        'id': _generateUuid(),
+        'id': applicationId,
         'full_name': _cafeNameController.text.trim(),
         'owner_name': _ownerNameController.text.trim(),
         'phone': _managerPhoneController.text.trim(),
@@ -131,6 +132,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         'description': _managerDescController.text.trim(),
         'role': 'ADMIN',
         'status': 'PENDING',
+        'owner_id': applicationId,
       });
     } on PostgrestException catch (e) {
       if (!mounted) return;
@@ -140,7 +142,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         msg = 'Permission denied. Please check your connection.';
       } else if (e.code == '23505') {
         msg = 'This application was already submitted.';
-      } else if (e.message != null && e.message!.isNotEmpty) {
+      } else if (e.message.isNotEmpty) {
         msg = 'Database error: ${e.message}';
       } else {
         msg = 'Something went wrong. Please try again.';

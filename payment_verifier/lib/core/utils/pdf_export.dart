@@ -477,15 +477,6 @@ class ReceiptPdfExport {
     return 'Br ${amount.toStringAsFixed(2)}';
   }
 
-  static String _pdfDateTime(DateTime dt) {
-    final y = dt.year.toString();
-    final m = dt.month.toString().padLeft(2, '0');
-    final d = dt.day.toString().padLeft(2, '0');
-    final h = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '$y-$m-$d $h:$min';
-  }
-
   static pw.Widget _headerCell(String text) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(6),
