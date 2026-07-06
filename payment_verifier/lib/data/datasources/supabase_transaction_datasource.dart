@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/data/models/transaction_model.dart';
-import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 import 'package:payment_verifier/domain/repositories/transaction_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,22 +9,57 @@ class SupabaseTransactionDatasource {
   SupabaseTransactionDatasource(this._client);
   final SupabaseClient _client;
 
+  Future<String?> _resolveScopeOwnerId() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return null;
+    try {
+      final response = await _client
+          .from(AppConstants.profilesTable)
+          .select('id, owner_id')
+          .eq('id', user.id)
+          .single();
+      final data = response;
+      return data['owner_id'] as String? ?? user.id;
+    } catch (_) {
+      return user.id;
+    }
+  }
+
   Future<List<TransactionModel>> getTransactions({
     String? statusFilter,
     String? bankFilter,
     String? searchQuery,
     String? userId,
+    String? ownerId,
   }) async {
     // Filters must be applied before transform operations (order)
-    final base = _client
-        .from(AppConstants.transactionsTable)
-        .select();
-    final baseFiltered = userId != null ? base.eq('verified_by', userId) : base;
-    final response = await baseFiltered.order('created_at', ascending: false);
-
-    var transactions = (response as List)
-        .map((e) => TransactionModel.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final scopeOwnerId = ownerId ?? await _resolveScopeOwnerId();
+    var transactions = <TransactionModel>[];
+    try {
+      final base = _client.from(AppConstants.transactionsTable).select();
+      var baseFiltered = base;
+      if (scopeOwnerId != null) {
+        baseFiltered = baseFiltered.eq('owner_id', scopeOwnerId);
+      }
+      if (userId != null) {
+        baseFiltered = baseFiltered.eq('verified_by', userId);
+      }
+      final response = await baseFiltered.order('created_at', ascending: false);
+      transactions = (response as List)
+          .map((e) => TransactionModel.fromJson(e))
+          .toList();
+    } catch (_) {
+      final response = await _client
+          .from(AppConstants.transactionsTable)
+          .select()
+          .order('created_at', ascending: false);
+      transactions = (response as List)
+          .map((e) => TransactionModel.fromJson(e))
+          .toList();
+      if (userId != null) {
+        transactions = transactions.where((t) => t.verifiedBy == userId).toList();
+      }
+    }
 
     if (statusFilter != null && statusFilter != 'All Status') {
       transactions = transactions
@@ -59,19 +93,39 @@ class SupabaseTransactionDatasource {
     return transactions;
   }
 
-  Future<List<TransactionModel>> getRecentTransactions({int limit = 5, String? userId}) async {
+  Future<List<TransactionModel>> getRecentTransactions({int limit = 5, String? userId, String? ownerId}) async {
     // Filters (eq) must come before transform operations (order, limit)
-    final base = _client
-        .from(AppConstants.transactionsTable)
-        .select();
-    final filtered = userId != null ? base.eq('verified_by', userId) : base;
-    final response = await filtered
-        .order('created_at', ascending: false)
-        .limit(limit);
+    final scopeOwnerId = ownerId ?? await _resolveScopeOwnerId();
+    try {
+      final base = _client.from(AppConstants.transactionsTable).select();
+      var filtered = base;
+      if (scopeOwnerId != null) {
+        filtered = filtered.eq('owner_id', scopeOwnerId);
+      }
+      if (userId != null) {
+        filtered = filtered.eq('verified_by', userId);
+      }
+      final response = await filtered
+          .order('created_at', ascending: false)
+          .limit(limit);
 
-    return (response as List)
-        .map((e) => TransactionModel.fromJson(e as Map<String, dynamic>))
-        .toList();
+      return (response as List)
+          .map((e) => TransactionModel.fromJson(e))
+          .toList();
+    } catch (_) {
+      final response = await _client
+          .from(AppConstants.transactionsTable)
+          .select()
+          .order('created_at', ascending: false)
+          .limit(limit);
+      var txs = (response as List)
+          .map((e) => TransactionModel.fromJson(e))
+          .toList();
+      if (userId != null) {
+        txs = txs.where((t) => t.verifiedBy == userId).toList();
+      }
+      return txs;
+    }
   }
 
   Future<TransactionModel> createTransaction({
@@ -87,6 +141,7 @@ class SupabaseTransactionDatasource {
     String status = 'VERIFIED',
   }) async {
     final userId = _client.auth.currentUser?.id;
+    final ownerId = await _resolveScopeOwnerId() ?? userId;
     final data = {
       'bank_name': bankName,
       'reference_code': referenceCode,
@@ -95,6 +150,7 @@ class SupabaseTransactionDatasource {
       'tip': tip,
       'status': status,
       'verified_by': userId,
+      'owner_id': ownerId,
       'receipt_image': imageUrl,
       'risk_score': riskScore,
       'risk_flags': riskFlags,
@@ -107,7 +163,7 @@ class SupabaseTransactionDatasource {
         .select()
         .single();
 
-    return TransactionModel.fromJson(response as Map<String, dynamic>);
+    return TransactionModel.fromJson(response);
   }
 
   Future<void> updateTransactionStatus(String id, String status) async {
@@ -121,22 +177,44 @@ class SupabaseTransactionDatasource {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     final todayEnd = todayStart.add(const Duration(days: 1));
+    final ownerId = await _resolveScopeOwnerId();
 
-    var todayQuery = _client
+    List<Map<String, dynamic>> todayTxs;
+    List<Map<String, dynamic>> allTxs;
+    try {
+      var todayQuery = _client
         .from(AppConstants.transactionsTable)
-        .select('amount, tip, status')
+          .select('amount, tip, status, verified_by')
         .gte('created_at', todayStart.toIso8601String())
         .lt('created_at', todayEnd.toIso8601String());
-    if (userId != null) todayQuery = todayQuery.eq('verified_by', userId);
-    final todayResponse = await todayQuery;
-    final todayTxs = (todayResponse as List).cast<Map<String, dynamic>>();
+      if (ownerId != null) todayQuery = todayQuery.eq('owner_id', ownerId);
+      if (userId != null) todayQuery = todayQuery.eq('verified_by', userId);
+      final todayResponse = await todayQuery;
+      todayTxs = (todayResponse as List).cast<Map<String, dynamic>>();
 
-    var allQuery = _client
+      var allQuery = _client
         .from(AppConstants.transactionsTable)
-        .select('amount, tip, status');
-    if (userId != null) allQuery = allQuery.eq('verified_by', userId);
-    final allResponse = await allQuery;
-    final allTxs = (allResponse as List).cast<Map<String, dynamic>>();
+          .select('amount, tip, status, verified_by');
+      if (ownerId != null) allQuery = allQuery.eq('owner_id', ownerId);
+      if (userId != null) allQuery = allQuery.eq('verified_by', userId);
+      final allResponse = await allQuery;
+      allTxs = (allResponse as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      final todayResponse = await _client
+        .from(AppConstants.transactionsTable)
+        .select('amount, tip, status, created_at')
+        .gte('created_at', todayStart.toIso8601String())
+        .lt('created_at', todayEnd.toIso8601String());
+      final allResponse = await _client
+        .from(AppConstants.transactionsTable)
+          .select('amount, tip, status, verified_by');
+      todayTxs = (todayResponse as List).cast<Map<String, dynamic>>();
+      allTxs = (allResponse as List).cast<Map<String, dynamic>>();
+      if (userId != null) {
+      todayTxs = todayTxs.where((t) => t['verified_by'] == userId).toList();
+      allTxs = allTxs.where((t) => t['verified_by'] == userId).toList();
+      }
+    }
 
     double totalIncome = 0, totalTips = 0;
     int totalVerified = 0, totalFailed = 0;
@@ -171,17 +249,30 @@ class SupabaseTransactionDatasource {
     );
   }
 
-  Future<Map<String, double>> getWeeklyTotals() async {
+  Future<Map<String, double>> getWeeklyTotals({String? ownerId}) async {
     final now = DateTime.now();
     final weekday = now.weekday;
     final weekStart = DateTime(now.year, now.month, now.day - weekday + 1);
     final weekEnd = weekStart.add(const Duration(days: 7));
+    final scopeOwnerId = ownerId ?? await _resolveScopeOwnerId();
 
-    final response = await _client
-        .from(AppConstants.transactionsTable)
-        .select('amount, created_at')
-        .gte('created_at', weekStart.toIso8601String())
-        .lt('created_at', weekEnd.toIso8601String());
+    final response = await (() async {
+      try {
+        var query = _client
+            .from(AppConstants.transactionsTable)
+            .select('amount, created_at')
+            .gte('created_at', weekStart.toIso8601String())
+            .lt('created_at', weekEnd.toIso8601String());
+        if (scopeOwnerId != null) query = query.eq('owner_id', scopeOwnerId);
+        return await query;
+      } catch (_) {
+        return await _client
+            .from(AppConstants.transactionsTable)
+            .select('amount, created_at')
+            .gte('created_at', weekStart.toIso8601String())
+            .lt('created_at', weekEnd.toIso8601String());
+      }
+    })();
 
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final totals = <String, double>{};
@@ -258,16 +349,25 @@ class SupabaseTransactionDatasource {
   }
 
   Future<void> deleteTransaction(String id) async {
-    await _client
-        .from(AppConstants.transactionsTable)
-        .delete()
-        .eq('id', id);
+    final scopeOwnerId = await _resolveScopeOwnerId();
+    try {
+      var query = _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+      if (scopeOwnerId != null) {
+        query = query.eq('owner_id', scopeOwnerId);
+      }
+      await query;
+    } catch (_) {
+      await _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+    }
   }
 
-  Future<void> clearAllTransactions() async {
+  Future<void> clearAllTransactions({String? ownerId}) async {
     int beforeCount = 0;
+    final scopeOwnerId = ownerId ?? await _resolveScopeOwnerId();
     try {
-      final rows = await _client.from(AppConstants.transactionsTable).select('id');
+      var rowsQuery = _client.from(AppConstants.transactionsTable).select('id');
+      if (scopeOwnerId != null) rowsQuery = rowsQuery.eq('owner_id', scopeOwnerId);
+      final rows = await rowsQuery;
       beforeCount = (rows as List).length;
     } catch (_) {}
 
@@ -278,15 +378,17 @@ class SupabaseTransactionDatasource {
       await _client.rpc('clear_all_data');
     } catch (e) {
       print('[clearAll] RPC failed – will try per-ID deletes: $e');
-      final rows = await _client
-          .from(AppConstants.transactionsTable)
-          .select('id');
+      var rowsQuery = _client.from(AppConstants.transactionsTable).select('id');
+      if (scopeOwnerId != null) rowsQuery = rowsQuery.eq('owner_id', scopeOwnerId);
+      final rows = await rowsQuery;
       final ids = (rows as List).map((r) => r['id'] as String).toList();
       var deleted = 0;
       Object? lastError;
       for (final id in ids) {
         try {
-          await _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+          var deleteQuery = _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+          if (scopeOwnerId != null) deleteQuery = deleteQuery.eq('owner_id', scopeOwnerId);
+          await deleteQuery;
           deleted++;
         } catch (e) {
           lastError = e;
@@ -299,7 +401,9 @@ class SupabaseTransactionDatasource {
     }
 
     // Verify rows were actually removed.
-    final remaining = await _client.from(AppConstants.transactionsTable).select('id');
+  var remainingQuery = _client.from(AppConstants.transactionsTable).select('id');
+  if (scopeOwnerId != null) remainingQuery = remainingQuery.eq('owner_id', scopeOwnerId);
+  final remaining = await remainingQuery;
     final afterCount = (remaining as List).length;
     if (afterCount > 0) {
       throw Exception(

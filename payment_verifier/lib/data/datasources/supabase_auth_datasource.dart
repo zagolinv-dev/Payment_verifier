@@ -1,6 +1,5 @@
 import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/data/models/user_profile_model.dart';
-import 'package:payment_verifier/domain/entities/user_profile_entity.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseAuthDatasource {
@@ -32,6 +31,7 @@ class SupabaseAuthDatasource {
     required String password,
     String? fullName,
     String? role = 'ADMIN',
+    String? ownerId,
     String? phone,
     String? ownerName,
     String? address,
@@ -43,6 +43,7 @@ class SupabaseAuthDatasource {
       data: {
         'full_name': fullName,
         'role': role,
+          'owner_id': ownerId,
         'phone': phone,
         'owner_name': ownerName,
         'address': address,
@@ -61,6 +62,7 @@ class SupabaseAuthDatasource {
           'full_name': fullName,
           'role': 'ADMIN',
           'status': 'PENDING',
+          'owner_id': user.id,
           'phone': phone,
           'owner_name': ownerName,
           'address': address,
@@ -94,13 +96,14 @@ class SupabaseAuthDatasource {
           .select()
           .eq('id', userId)
           .single();
-      final data = response as Map<String, dynamic>;
+      final data = response;
       data['email'] = email;
       return UserProfileModel.fromJson(data);
     } catch (_) {
       return UserProfileModel(
         id: userId,
         email: email,
+        ownerId: null,
         role: UserRole.waitress,
         createdAt: DateTime.now(),
       );

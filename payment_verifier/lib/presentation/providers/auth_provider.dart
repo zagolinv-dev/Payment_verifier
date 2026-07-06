@@ -35,7 +35,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserProfileEntity?>> {
     try {
       final user = await _repo.getCurrentUser();
       state = AsyncValue.data(user);
-    } catch (e, st) {
+    } catch (e) {
       state = AsyncValue.data(null);
     }
   }
@@ -55,8 +55,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserProfileEntity?>> {
       }
 
       state = AsyncValue.data(user);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+    } catch (e) {
+      state = AsyncValue.error(e, StackTrace.current);
     }
   }
 
@@ -65,6 +65,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserProfileEntity?>> {
     required String password,
     String? fullName,
     String? role,
+    String? ownerId,
     String? phone,
     String? ownerName,
     String? address,
@@ -77,6 +78,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserProfileEntity?>> {
         password: password,
         fullName: fullName,
         role: role,
+        ownerId: ownerId,
         phone: phone,
         ownerName: ownerName,
         address: address,
