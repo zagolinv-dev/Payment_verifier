@@ -15,8 +15,9 @@ class ReceiptPdfExport {
   }) async {
     final pdf = pw.Document();
 
+    final allTxs = grouped.values.expand((l) => l).toList();
+
     // Pre-fetch network image bytes for PDF embedding
-    // Falls back to a signed URL if the public URL returns a non-200 status.
     final imageBytes = <String, Uint8List>{};
     final client = HttpClient();
     for (final txs in grouped.values) {
@@ -24,7 +25,6 @@ class ReceiptPdfExport {
         final img = tx.receiptImage;
         if (img == null) continue;
         if (img.startsWith('http://') || img.startsWith('https://')) {
-          // Strip fragment (#path=...) before fetching
           final fetchUrl = img.contains('#') ? img.substring(0, img.indexOf('#')) : img;
           try {
             final request = await client.getUrl(Uri.parse(fetchUrl));
@@ -34,7 +34,6 @@ class ReceiptPdfExport {
               await for (final chunk in response) bytes.addAll(chunk);
               imageBytes[tx.id] = Uint8List.fromList(bytes);
             } else {
-              // Non-200: try a signed URL using the embedded storage path
               final storagePath = _extractStoragePath(img);
               if (storagePath != null) {
                 try {
@@ -62,6 +61,30 @@ class ReceiptPdfExport {
     }
     client.close();
 
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final weekStart = todayStart.subtract(Duration(days: todayStart.weekday - 1));
+    final monthStart = DateTime(now.year, now.month, 1);
+    final yearStart = DateTime(now.year, 1, 1);
+
+    double periodRevenue(List<TransactionEntity> txs, DateTime start) {
+      double s = 0;
+      for (final tx in txs) {
+        if (tx.status == TransactionStatus.verified && tx.createdAt.isAfter(start)) {
+          s += tx.amount + tx.tip;
+        }
+      }
+      return s;
+    }
+
+    int periodCount(List<TransactionEntity> txs, DateTime start) {
+      int c = 0;
+      for (final tx in txs) {
+        if (tx.status == TransactionStatus.verified && tx.createdAt.isAfter(start)) c++;
+      }
+      return c;
+    }
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -69,29 +92,37 @@ class ReceiptPdfExport {
         header: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text(
-              "T's Verify",
-              style: pw.TextStyle(
-                fontSize: 22,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.green700,
-              ),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  "T's Verify",
+                  style: pw.TextStyle(
+                    fontSize: 22,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.green700,
+                  ),
+                ),
+                pw.Text(
+                  _pdfDateTime(now),
+                  style: const pw.TextStyle(
+                    fontSize: 9,
+                    color: PdfColors.grey500,
+                  ),
+                ),
+              ],
             ),
+            pw.SizedBox(height: 2),
+            pw.Container(height: 1, color: PdfColors.green200),
+            pw.SizedBox(height: 6),
             pw.Text(
               title,
               style: const pw.TextStyle(
-                fontSize: 14,
-                color: PdfColors.grey600,
+                fontSize: 13,
+                color: PdfColors.grey700,
               ),
             ),
-            pw.Text(
-              'Generated: ${_pdfDateTime(DateTime.now())}',
-              style: const pw.TextStyle(
-                fontSize: 10,
-                color: PdfColors.grey400,
-              ),
-            ),
-            pw.SizedBox(height: 8),
+            pw.SizedBox(height: 10),
           ],
         ),
         footer: (context) => pw.Text(
@@ -105,6 +136,64 @@ class ReceiptPdfExport {
           double grandTotalTips = 0;
           int grandTotalCount = 0;
 
+          // ── Period Summary Cards ──
+          final periodData = <(String label, DateTime start)>[
+            ('Today', todayStart),
+            ('This Week', weekStart),
+            ('This Month', monthStart),
+            ('This Year', yearStart),
+            ('All Time', DateTime(2000)),
+          ];
+
+          pages.add(
+            pw.Container(
+              padding: const pw.EdgeInsets.all(14),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.green50,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                border: pw.Border.all(color: PdfColors.green200, width: 0.5),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Revenue Summary',
+                    style: pw.TextStyle(
+                      fontSize: 13,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.green800,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  for (final p in periodData)
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 3),
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text(
+                            p.$1,
+                            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                          ),
+                          pw.Text(
+                            '${_pdfMoney(periodRevenue(allTxs, p.$2))}  (${periodCount(allTxs, p.$2)} scans)',
+                            style: pw.TextStyle(
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.green800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+
+          pages.add(pw.SizedBox(height: 14));
+
+          // ── Scanner Breakdown ──
           final sortedScanners = grouped.keys.toList()..sort();
 
           for (final scannerName in sortedScanners) {
@@ -124,13 +213,12 @@ class ReceiptPdfExport {
             grandTotalTips += scannerTips;
             grandTotalCount += scannerCount;
 
-            pages.add(pw.SizedBox(height: 16));
             pages.add(
               pw.Container(
                 padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.green50,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
                 ),
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -138,15 +226,15 @@ class ReceiptPdfExport {
                     pw.Text(
                       _safe(scannerName),
                       style: pw.TextStyle(
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: pw.FontWeight.bold,
                         color: PdfColors.green800,
                       ),
                     ),
                     pw.Text(
-                      '$scannerCount scans',
+                      '$scannerCount scans — ${_pdfMoney(scannerAmount)}',
                       style: const pw.TextStyle(
-                        fontSize: 12,
+                        fontSize: 10,
                         color: PdfColors.grey600,
                       ),
                     ),
@@ -154,69 +242,72 @@ class ReceiptPdfExport {
                 ),
               ),
             );
-
             pages.add(pw.SizedBox(height: 6));
-            pages.add(
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-                columnWidths: {
-                  0: const pw.FixedColumnWidth(20),
-                  1: const pw.FixedColumnWidth(76),
-                  2: const pw.FixedColumnWidth(52),
-                  3: const pw.FixedColumnWidth(72),
-                  4: const pw.FixedColumnWidth(56),
-                  5: const pw.FixedColumnWidth(52),  // Tip — wider so values don't truncate
-                  6: const pw.FixedColumnWidth(68),
-                },
-                children: [
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.grey100),
-                    children: [
-                      _headerCell('#'),
-                      _headerCell('Buyer'),
-                      _headerCell('Bank'),
-                      _headerCell('Reference'),
-                      _headerCell('Amount'),
-                      _headerCell('Tip'),
-                      _headerCell('Date'),
-                    ],
-                  ),
-                  for (int i = 0; i < txs.length; i++)
+
+            // ── Transactions Table ──
+            if (txs.isNotEmpty) {
+              pages.add(
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                  columnWidths: {
+                    0: const pw.FixedColumnWidth(20),
+                    1: const pw.FixedColumnWidth(72),
+                    2: const pw.FixedColumnWidth(46),
+                    3: const pw.FixedColumnWidth(68),
+                    4: const pw.FixedColumnWidth(52),
+                    5: const pw.FixedColumnWidth(48),
+                    6: const pw.FixedColumnWidth(62),
+                  },
+                  children: [
                     pw.TableRow(
+                      decoration: const pw.BoxDecoration(color: PdfColors.grey100),
                       children: [
-                        _cell('${i + 1}'),
-                        _cell(txs[i].buyerName),
-                        _cell(txs[i].bankName.length > 8
-                            ? '${txs[i].bankName.substring(0, 8)}...'
-                            : txs[i].bankName),
-                        _cell(txs[i].referenceCode.length > 10
-                            ? '...${txs[i].referenceCode.substring(txs[i].referenceCode.length - 8)}'
-                            : txs[i].referenceCode),
-                        _cell(_pdfMoney(txs[i].amount)),
-                        _tipCell(txs[i].tip > 0 ? _pdfMoney(txs[i].tip) : '-'),
-                        _cell(AppFormatters.formatDateShort(txs[i].createdAt)),
+                        _headerCell('#'),
+                        _headerCell('Buyer'),
+                        _headerCell('Bank'),
+                        _headerCell('Reference'),
+                        _headerCell('Amount'),
+                        _headerCell('Tip'),
+                        _headerCell('Date'),
                       ],
                     ),
-                ],
-              ),
-            );
+                    for (int i = 0; i < txs.length; i++)
+                      pw.TableRow(
+                        decoration: txs[i].tip > 0
+                            ? const pw.BoxDecoration(color: PdfColor.fromInt(0xFFFFFDE7))
+                            : null,
+                        children: [
+                          _cell('${i + 1}'),
+                          _cell(txs[i].buyerName),
+                          _cell(txs[i].bankName.length > 8
+                              ? '${txs[i].bankName.substring(0, 8)}...'
+                              : txs[i].bankName),
+                          _cell(txs[i].referenceCode.length > 10
+                              ? '...${txs[i].referenceCode.substring(txs[i].referenceCode.length - 8)}'
+                              : txs[i].referenceCode),
+                          _cell(_pdfMoney(txs[i].amount)),
+                          txs[i].tip > 0
+                              ? _tipCell(_pdfMoney(txs[i].tip))
+                              : _cell('-'),
+                          _cell(AppFormatters.formatDateShort(txs[i].createdAt)),
+                        ],
+                      ),
+                  ],
+                ),
+              );
+            }
 
-            // Receipt images for this scanner
+            // ── Receipt Images Grid ──
             final txsWithImages = txs.where((t) => t.receiptImage != null).toList();
             if (txsWithImages.isNotEmpty) {
-              pages.add(pw.SizedBox(height: 8));
+              pages.add(pw.SizedBox(height: 10));
               pages.add(
                 pw.Container(
                   padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 0),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border(
-                      top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                    ),
-                  ),
                   child: pw.Text(
-                    'Receipt Images:',
+                    'Receipt Images',
                     style: pw.TextStyle(
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: pw.FontWeight.bold,
                       color: PdfColors.grey700,
                     ),
@@ -225,9 +316,8 @@ class ReceiptPdfExport {
               );
               pages.add(pw.SizedBox(height: 4));
 
-              // Show images in rows of 3 with metadata captions
-              for (int i = 0; i < txsWithImages.length; i += 3) {
-                final rowTxs = txsWithImages.sublist(i, (i + 3).clamp(0, txsWithImages.length));
+              for (int i = 0; i < txsWithImages.length; i += 2) {
+                final rowTxs = txsWithImages.sublist(i, (i + 2).clamp(0, txsWithImages.length));
                 final rowWidgets = <pw.Widget>[];
                 for (final tx in rowTxs) {
                   try {
@@ -240,32 +330,31 @@ class ReceiptPdfExport {
                             margin: const pw.EdgeInsets.only(right: 4),
                             decoration: pw.BoxDecoration(
                               border: pw.Border.all(color: PdfColors.grey200, width: 0.5),
-                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
                             ),
                             child: pw.Column(
                               crossAxisAlignment: pw.CrossAxisAlignment.center,
                               children: [
-                                pw.ClipRect(
-                                  child: pw.Image(img, width: 100, height: 120, fit: pw.BoxFit.cover),
-                                ),
-                                pw.SizedBox(height: 3),
-                                pw.Text(
-                                  _safe(tx.referenceCode),
-                                  style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
-                                  textAlign: pw.TextAlign.center,
-                                ),
-                                pw.Text(
-                                  _safe(_pdfMoney(tx.amount)),
-                                  style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
-                                  textAlign: pw.TextAlign.center,
-                                ),
-                                if (tx.tip > 0)
-                                  pw.Text(
-                                    _safe('+${_pdfMoney(tx.tip)} tip'),
-                                    style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700),
-                                    textAlign: pw.TextAlign.center,
+                                pw.Image(img, width: 160, height: 180, fit: pw.BoxFit.cover),
+                                pw.Container(
+                                  padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                                  width: double.infinity,
+                                  color: PdfColors.grey50,
+                                  child: pw.Column(
+                                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                    children: [
+                                      pw.Text(
+                                        tx.referenceCode,
+                                        style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                                      ),
+                                      pw.SizedBox(height: 1),
+                                      pw.Text(
+                                        '${_pdfMoney(tx.amount)}${tx.tip > 0 ? ' (+${_pdfMoney(tx.tip)} tip)' : ''}',
+                                        style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+                                      ),
+                                    ],
                                   ),
-                                pw.SizedBox(height: 3),
+                                ),
                               ],
                             ),
                           ),
@@ -278,8 +367,7 @@ class ReceiptPdfExport {
                     rowWidgets.add(pw.Expanded(child: pw.Container()));
                   }
                 }
-                // Fill remaining slots in the row with empty containers
-                while (rowWidgets.length < 3) {
+                while (rowWidgets.length < 2) {
                   rowWidgets.add(pw.Expanded(child: pw.Container()));
                 }
                 pages.add(
@@ -289,63 +377,55 @@ class ReceiptPdfExport {
                     children: rowWidgets,
                   ),
                 );
-                pages.add(pw.SizedBox(height: 6));
+                pages.add(pw.SizedBox(height: 8));
               }
             }
 
+            // ── Scanner Summary ──
             pages.add(pw.SizedBox(height: 6));
             pages.add(
               pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 14),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.green50,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
                   border: pw.Border.all(color: PdfColors.green200, width: 0.5),
                 ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Revenue:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                        pw.Text(_pdfMoney(scannerAmount), style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
-                      ],
+                    _summaryRow('Revenue', _pdfMoney(scannerAmount), PdfColors.green800),
+                    pw.SizedBox(height: 2),
+                    _summaryRow(
+                      'Tips',
+                      scannerTips > 0 ? _pdfMoney(scannerTips) : '-',
+                      PdfColors.amber,
                     ),
-                    pw.SizedBox(height: 3),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Tips:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-                        pw.Text(
-                          scannerTips > 0 ? _pdfMoney(scannerTips) : '-',
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.amber),
-                        ),
-                      ],
-                    ),
-                    pw.SizedBox(height: 3),
+                    pw.SizedBox(height: 2),
                     pw.Divider(thickness: 0.5, color: PdfColors.green300),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Total (incl. tips):', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
-                        pw.Text(_pdfMoney(scannerAmount + scannerTips), style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.green800)),
-                      ],
+                    pw.SizedBox(height: 2),
+                    _summaryRow(
+                      'Total (incl. tips)',
+                      _pdfMoney(scannerAmount + scannerTips),
+                      PdfColors.green800,
                     ),
                   ],
                 ),
               ),
             );
+
+            pages.add(pw.SizedBox(height: 14));
           }
 
-          pages.add(pw.Divider(thickness: 2));
+          // ── Grand Total ──
+          pages.add(pw.Divider(thickness: 1.5, color: PdfColors.green300));
           pages.add(pw.SizedBox(height: 8));
           pages.add(
             pw.Container(
-              padding: const pw.EdgeInsets.all(16),
+              padding: const pw.EdgeInsets.all(18),
               decoration: pw.BoxDecoration(
                 color: PdfColors.green800,
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
               ),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -358,27 +438,18 @@ class ReceiptPdfExport {
                       color: PdfColors.white,
                     ),
                   ),
+                  pw.SizedBox(height: 6),
+                  _grandTotalRow('Total Scans', '$grandTotalCount'),
+                  pw.SizedBox(height: 3),
+                  _grandTotalRow('Revenue', _pdfMoney(grandTotalAmount)),
+                  pw.SizedBox(height: 3),
+                  _grandTotalRow('Tips', _pdfMoney(grandTotalTips)),
+                  pw.SizedBox(height: 3),
+                  pw.Divider(thickness: 0.5, color: PdfColors.green400),
                   pw.SizedBox(height: 4),
-                  pw.Text(
-                    'Total Scans: $grandTotalCount',
-                    style: pw.TextStyle(fontSize: 11, color: PdfColors.white),
-                  ),
-                  pw.Text(
-                    'Total Revenue: ${_pdfMoney(grandTotalAmount)}',
-                    style: pw.TextStyle(fontSize: 13, color: PdfColors.white),
-                  ),
-                  pw.Text(
-                    'Total Tips: ${_pdfMoney(grandTotalTips)}',
-                    style: pw.TextStyle(fontSize: 13, color: PdfColors.amberAccent),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    'Grand Total (Revenue + Tips): ${_pdfMoney(grandTotalAmount + grandTotalTips)}',
-                    style: pw.TextStyle(
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.white,
-                    ),
+                  _grandTotalRow(
+                    'Grand Total (Revenue + Tips)',
+                    _pdfMoney(grandTotalAmount + grandTotalTips),
                   ),
                 ],
               ),
@@ -404,6 +475,15 @@ class ReceiptPdfExport {
   /// Plain ASCII currency format safe for PDF rendering (no locale-specific symbols)
   static String _pdfMoney(double amount) {
     return 'Br ${amount.toStringAsFixed(2)}';
+  }
+
+  static String _pdfDateTime(DateTime dt) {
+    final y = dt.year.toString();
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    final h = dt.hour.toString().padLeft(2, '0');
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '$y-$m-$d $h:$min';
   }
 
   static pw.Widget _headerCell(String text) {
@@ -445,15 +525,31 @@ class ReceiptPdfExport {
     );
   }
 
-  /// Extracts the Supabase Storage path from a receipt URL.
-  /// Handles both the "#path=..." fragment we embed and the URL path itself.
+  static pw.Widget _summaryRow(String label, String value, PdfColor color) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+        pw.Text(value, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: color)),
+      ],
+    );
+  }
+
+  static pw.Widget _grandTotalRow(String label, String value) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: label.startsWith('Grand') ? 14 : 11, color: PdfColors.white)),
+        pw.Text(value, style: pw.TextStyle(fontSize: label.startsWith('Grand') ? 14 : 11, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+      ],
+    );
+  }
+
   static String? _extractStoragePath(String url) {
-    // Check embedded fragment: "#path=userId/receipt_123.jpg"
     final uri = Uri.tryParse(url);
     if (uri != null && uri.fragment.startsWith('path=')) {
       return uri.fragment.substring(5);
     }
-    // Fallback: parse from URL path ".../receipts/userId/receipt_123.jpg"
     final match = RegExp(r'/receipts/(.+?)(?:\?|$)').firstMatch(url);
     return match?.group(1);
   }

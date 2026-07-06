@@ -18,18 +18,35 @@ export default function UsersPage() {
     phone: "", ownerName: "", address: "", description: "",
   });
   const [companies, setCompanies] = useState([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "info" });
+  const [editUser, setEditUser] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editRole, setEditRole] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editOwnerName, setEditOwnerName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => { loadUsers(); }, []);
 
   const loadCompanies = async () => {
+    setCompaniesLoading(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, owner_name")
         .eq("role", "ADMIN");
+      if (error) throw error;
+      console.log("Companies loaded:", data);
       setCompanies(data || []);
     } catch (err) { console.error("Failed to load companies:", err); }
+    finally { setCompaniesLoading(false); }
   };
 
   const showToast = (msg, type = "success") => {
@@ -61,28 +78,87 @@ export default function UsersPage() {
       });
       const result = await res.json();
       if (!res.ok) { showToast(result.error || "Failed to create user", "error"); setCreating(false); return; }
+      const createdRole = newUser.role;
       showToast(`User ${newUser.email} created successfully!`, "success");
       setShowAddModal(false);
       setNewUser({ email: "", password: "", fullName: "", role: "WAITRESS", phone: "", ownerName: "", address: "", description: "" });
       await loadUsers();
+      if (createdRole === "ADMIN") {
+        await loadCompanies();
+      }
     } catch (err) { showToast(err.message, "error"); }
     setCreating(false);
   };
 
   const handleUpdateRole = async (id, newRole) => {
     try {
-      const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", id);
-      if (error) throw error;
-      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role: newRole } : u)));
+      const res = await fetch("/api/update-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: id, role: newRole }),
+      });
+      const result = await res.json();
+      if (!res.ok) { showToast(result.error || "Failed to update role", "error"); return; }
+      await loadUsers();
       showToast(`User role updated to ${newRole}`, "success");
     } catch (err) { showToast(err.message, "error"); }
   };
 
+  const handleEditClick = async (user) => {
+    await loadCompanies();
+    setEditUser(user);
+    setEditRole(user.role);
+    setEditName(user.full_name || "");
+    setEditEmail(user.email || "");
+    setEditOwnerName(user.owner_name || "");
+    setEditPhone(user.phone || "");
+    setEditAddress(user.address || "");
+    setEditDescription(user.description || "");
+    setEditPassword("");
+    setShowEditPassword(false);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editUser) return;
+    setSaving(true);
+    try {
+      const body = {
+        userId: editUser.id,
+        role: editRole,
+        fullName: editName,
+        email: editEmail,
+        ownerName: editRole === "ADMIN" ? editOwnerName : null,
+        phone: editRole === "ADMIN" ? editPhone : null,
+        address: editRole === "ADMIN" ? editAddress : null,
+        description: editRole === "ADMIN" ? editDescription : null,
+        password: editPassword || undefined,
+      };
+      const res = await fetch("/api/update-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await res.json();
+      if (!res.ok) { showToast(result.error || "Failed to update user", "error"); setSaving(false); return; }
+      await loadUsers();
+      setShowEditModal(false);
+      setEditUser(null);
+      showToast(`User updated successfully`, "success");
+    } catch (err) { showToast(err.message, "error"); }
+    setSaving(false);
+  };
+
   const handleDeleteUser = async (id, email) => {
     try {
-      const { error } = await supabase.from("profiles").delete().eq("id", id);
-      if (error) throw error;
-      setUsers((prev) => prev.filter((u) => u.id !== id));
+      const res = await fetch("/api/delete-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: id }),
+      });
+      const result = await res.json();
+      if (!res.ok) { showToast(result.error || "Failed to delete user", "error"); return; }
+      await loadUsers();
       showToast(`User ${email} deleted.`, "success");
     } catch (err) { showToast(err.message, "error"); }
   };
@@ -118,7 +194,7 @@ export default function UsersPage() {
             <p className={`text-xs mt-1 ${darkMode ? "text-zinc-500" : "text-zinc-500"}`}>Manage all platform users and their roles</p>
           </div>
           <button
-            onClick={() => { loadCompanies(); setShowAddModal(true); }}
+            onClick={async () => { await loadCompanies(); setShowAddModal(true); }}
             className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold text-xs shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 transition-all cursor-pointer"
           >
             + Add User
@@ -208,13 +284,10 @@ export default function UsersPage() {
                     <td className={`p-4 sm:p-5 font-mono ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="p-4 sm:p-5 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <select value={user.role} onChange={(e) => handleUpdateRole(user.id, e.target.value)}
-                          className={`text-[10px] px-2 py-1.5 rounded-lg border font-bold outline-none cursor-pointer transition-all ${
-                            darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"
-                          }`}>
-                          <option value="WAITRESS">WAITRESS</option>
-                          <option value="ADMIN">ADMIN</option>
-                        </select>
+                        <button onClick={() => handleEditClick(user)}
+                          className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 border">
+                          Edit
+                        </button>
                         <button onClick={() => handleDeleteUser(user.id, user.email)}
                           className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 border">
                           Delete
@@ -323,16 +396,24 @@ export default function UsersPage() {
                   </>
                 )}
 
-                {newUser.role === "WAITRESS" && companies.length > 0 && (
+                {newUser.role === "WAITRESS" && (
                   <div>
                     <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Assign to Company</label>
-                    <select value={newUser.ownerName} onChange={(e) => setNewUser({ ...newUser, ownerName: e.target.value })}
-                      className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}>
-                      <option value="">Select a company...</option>
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.owner_name || c.full_name}>{c.owner_name || c.full_name}</option>
-                      ))}
-                    </select>
+                    {companiesLoading ? (
+                      <div className={`text-xs px-4 py-2.5 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Loading companies...</div>
+                    ) : companies.length === 0 ? (
+                      <div className={`text-xs px-4 py-2.5 rounded-xl border ${darkMode ? "border-amber-500/20 text-amber-400" : "border-amber-500/20 text-amber-600"}`}>
+                        No companies available. Create an Admin user first.
+                      </div>
+                    ) : (
+                      <select value={newUser.ownerName} onChange={(e) => setNewUser({ ...newUser, ownerName: e.target.value })}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}>
+                        <option value="">Select a company...</option>
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.owner_name || c.full_name}>{c.owner_name || c.full_name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 )}
 
@@ -347,6 +428,119 @@ export default function UsersPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {showEditModal && editUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowEditModal(false)}>
+            <div className={`relative w-full max-w-md rounded-2xl overflow-hidden shadow-2xl border transition-all ${
+              darkMode ? "bg-[#0F1626] border-white/[0.06]" : "bg-white border-black/5"
+            }`} onClick={(e) => e.stopPropagation()}>
+              <div className={`px-6 py-4 border-b flex items-center justify-between ${
+                darkMode ? "border-white/[0.06]" : "border-black/5"
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"}`}>
+                    <UsersIcon className="w-4 h-4" />
+                  </div>
+                  <h3 className={`text-sm font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>Edit User</h3>
+                </div>
+                <button onClick={() => setShowEditModal(false)} className={`text-lg hover:opacity-80 font-bold p-1 cursor-pointer ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>✕</button>
+              </div>
+              <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                <div>
+                  <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Name</label>
+                  <input type="text" value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`} />
+                </div>
+                <div>
+                  <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Email</label>
+                  <input type="email" value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`} />
+                </div>
+                <div>
+                  <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Role</label>
+                  {editUser.role === "ADMIN" ? (
+                    <div className={`w-full px-4 py-2.5 rounded-xl border text-sm ${darkMode ? "bg-[#080E1A] border-white/10 text-zinc-400" : "bg-zinc-50 border-black/10 text-zinc-500"}`}>
+                      Admin (Manager) — cannot change to Waitress
+                    </div>
+                  ) : (
+                    <select value={editRole} onChange={(e) => setEditRole(e.target.value)}
+                      className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}>
+                      <option value="WAITRESS">Waitress</option>
+                      <option value="ADMIN">Admin (Manager)</option>
+                    </select>
+                  )}
+                </div>
+
+                {editRole === "ADMIN" && (
+                  <div className={`border-t pt-4 ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider mb-3 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Company Details</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Company</label>
+                        <select value={editOwnerName} onChange={(e) => setEditOwnerName(e.target.value)}
+                          className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}>
+                          <option value="">Select a company...</option>
+                          {companies.map((c) => (
+                            <option key={c.id} value={c.owner_name || c.full_name}>{c.owner_name || c.full_name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Phone Number</label>
+                        <input type="text" value={editPhone}
+                          onChange={(e) => setEditPhone(e.target.value)}
+                          placeholder="e.g. +251 911 223 344"
+                          className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"}`} />
+                      </div>
+                      <div className="col-span-2">
+                        <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Address</label>
+                        <input type="text" value={editAddress}
+                          onChange={(e) => setEditAddress(e.target.value)}
+                          placeholder="e.g. Addis Ababa, Ethiopia"
+                          className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"}`} />
+                      </div>
+                      <div className="col-span-2">
+                        <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Description</label>
+                        <textarea value={editDescription}
+                          onChange={(e) => setEditDescription(e.target.value)}
+                          placeholder="Brief description about the company"
+                          rows={2}
+                          className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all resize-none ${darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"}`} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className={`border-t pt-4 ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wider mb-3 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Change Password</p>
+                  <div className="relative">
+                    <input type={showEditPassword ? "text" : "password"} value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="Leave blank to keep current password"
+                      minLength={6}
+                      className={`w-full px-4 py-2.5 pr-11 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"}`} />
+                    <button type="button" onClick={() => setShowEditPassword(!showEditPassword)}
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"}`} tabIndex={-1}>
+                      {showEditPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button type="button" onClick={() => setShowEditModal(false)}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${darkMode ? "bg-white/5 text-zinc-300 hover:bg-white/10" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleSaveEdit} disabled={saving}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold text-xs shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 transition-all cursor-pointer disabled:opacity-50">
+                    {saving ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
