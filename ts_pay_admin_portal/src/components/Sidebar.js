@@ -204,7 +204,7 @@ export default function Sidebar({ darkMode, email, onLogout, mobileOpen, onClose
 
   return (
     <>
-      <aside className={`hidden lg:flex w-56 xl:w-64 flex-col p-5 border-r transition-all duration-300 ${
+      <aside className={`hidden lg:flex w-56 xl:w-64 flex-col p-5 border-r overflow-y-auto transition-all duration-300 ${
         darkMode ? "bg-[#0F1626]/90 border-white/[0.06]" : "bg-white/90 border-black/5 backdrop-blur-xl"
       }`}>
         {content}

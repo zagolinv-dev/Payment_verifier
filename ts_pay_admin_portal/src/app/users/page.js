@@ -15,7 +15,7 @@ export default function UsersPage() {
   const [creating, setCreating] = useState(false);
   const [newUser, setNewUser] = useState({
     email: "", password: "", fullName: "", role: "WAITRESS",
-    phone: "", ownerName: "", address: "", description: "",
+    phone: "", ownerName: "", address: "", description: "", cafeId: "",
   });
   const [companies, setCompanies] = useState([]);
   const [companiesLoading, setCompaniesLoading] = useState(false);
@@ -38,13 +38,11 @@ export default function UsersPage() {
   const loadCompanies = async () => {
     setCompaniesLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, owner_name")
-        .eq("role", "ADMIN");
-      if (error) throw error;
-      console.log("Companies loaded:", data);
-      setCompanies(data || []);
+      const res = await fetch("/api/profiles?role=ADMIN");
+      if (!res.ok) throw new Error("Failed to fetch companies");
+      const { profiles } = await res.json();
+      console.log("Companies loaded:", profiles);
+      setCompanies(profiles || []);
     } catch (err) { console.error("Failed to load companies:", err); }
     finally { setCompaniesLoading(false); }
   };
@@ -56,13 +54,10 @@ export default function UsersPage() {
 
   const loadUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .neq("role", "SUPER_ADMIN")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      setUsers(data || []);
+      const res = await fetch("/api/profiles?excludeRole=SUPER_ADMIN");
+      if (!res.ok) throw new Error("Failed to fetch users");
+      const { profiles } = await res.json();
+      setUsers(profiles || []);
     } catch (err) { console.error("Failed to load users:", err); }
     finally { setLoading(false); }
   };
@@ -81,7 +76,7 @@ export default function UsersPage() {
       const createdRole = newUser.role;
       showToast(`User ${newUser.email} created successfully!`, "success");
       setShowAddModal(false);
-      setNewUser({ email: "", password: "", fullName: "", role: "WAITRESS", phone: "", ownerName: "", address: "", description: "" });
+      setNewUser({ email: "", password: "", fullName: "", role: "WAITRESS", phone: "", ownerName: "", address: "", description: "", cafeId: "" });
       await loadUsers();
       if (createdRole === "ADMIN") {
         await loadCompanies();
@@ -90,19 +85,7 @@ export default function UsersPage() {
     setCreating(false);
   };
 
-  const handleUpdateRole = async (id, newRole) => {
-    try {
-      const res = await fetch("/api/update-role", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: id, role: newRole }),
-      });
-      const result = await res.json();
-      if (!res.ok) { showToast(result.error || "Failed to update role", "error"); return; }
-      await loadUsers();
-      showToast(`User role updated to ${newRole}`, "success");
-    } catch (err) { showToast(err.message, "error"); }
-  };
+
 
   const handleEditClick = async (user) => {
     await loadCompanies();
@@ -272,7 +255,7 @@ export default function UsersPage() {
                     </td>
                     <td className="p-4 sm:p-5">{user.email}</td>
                     <td className={`p-4 sm:p-5 ${darkMode ? "text-zinc-300" : "text-zinc-600"}`}>
-                      {user.owner_name || (user.role === "WAITRESS" ? "—" : user.full_name || "—")}
+                      {user.company_name || "—"}
                     </td>
                     <td className="p-4 sm:p-5">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
@@ -284,6 +267,7 @@ export default function UsersPage() {
                     <td className={`p-4 sm:p-5 font-mono ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="p-4 sm:p-5 text-right">
                       <div className="flex items-center justify-end gap-2">
+
                         <button onClick={() => handleEditClick(user)}
                           className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 border">
                           Edit
@@ -406,11 +390,11 @@ export default function UsersPage() {
                         No companies available. Create an Admin user first.
                       </div>
                     ) : (
-                      <select value={newUser.ownerName} onChange={(e) => setNewUser({ ...newUser, ownerName: e.target.value })}
+                      <select value={newUser.cafeId} onChange={(e) => setNewUser({ ...newUser, cafeId: e.target.value })}
                         className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}>
                         <option value="">Select a company...</option>
                         {companies.map((c) => (
-                          <option key={c.id} value={c.owner_name || c.full_name}>{c.owner_name || c.full_name}</option>
+                          <option key={c.id} value={c.id}>{c.owner_name || c.full_name}</option>
                         ))}
                       </select>
                     )}

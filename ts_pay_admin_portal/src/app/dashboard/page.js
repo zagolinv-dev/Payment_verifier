@@ -24,36 +24,11 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     try {
-      const [txResult, profileResult] = await Promise.all([
-        supabase.from("transactions").select("*"),
-        supabase.from("profiles").select("*", { count: "exact", head: true }),
-      ]);
-      const txns = txResult.data || [];
-      const totalAmount = txns.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-      const verifiedCount = txns.filter((t) => t.status === "VERIFIED").length;
-      const failedCount = txns.filter((t) => t.status === "FAILED").length;
-      const pendingCount = txns.filter((t) => t.status === "PENDING").length;
-
-      setMetrics({
-        totalAmount, totalTransactions: txns.length, pendingCount,
-        verifiedCount, failedCount, userCount: profileResult.count || 0,
-      });
-
-      const days = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const dayStr = d.toISOString().slice(0, 10);
-        const dayTxns = txns.filter((t) => t.created_at?.startsWith(dayStr));
-        days.push({
-          name: d.toLocaleDateString("en-US", { weekday: "short" }),
-          total: dayTxns.reduce((s, t) => s + (Number(t.amount) || 0), 0),
-          count: dayTxns.length,
-          verified: dayTxns.filter((t) => t.status === "VERIFIED").length,
-          pending: dayTxns.filter((t) => t.status === "PENDING").length,
-          failed: dayTxns.filter((t) => t.status === "FAILED").length,
-        });
-      }
-      setWeeklyData(days);
+      const res = await fetch("/api/dashboard-data");
+      if (!res.ok) throw new Error("Failed to fetch dashboard data");
+      const { metrics: m, weeklyData: w } = await res.json();
+      setMetrics(m);
+      setWeeklyData(w);
     } catch (err) { console.error("Failed to load dashboard data:", err); }
     finally { setLoading(false); }
   };

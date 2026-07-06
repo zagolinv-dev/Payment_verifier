@@ -21,12 +21,9 @@ export default function CompaniesPage() {
 
   const loadData = async () => {
     try {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("role", "ADMIN")
-        .order("created_at", { ascending: false });
-
+      const res = await fetch("/api/profiles?role=ADMIN");
+      if (!res.ok) throw new Error("Failed to fetch companies");
+      const { profiles } = await res.json();
       setCompanies((profiles || []).map((m) => ({
         ...m,
         status: m.status === "APPROVED" || !m.status ? "ACTIVE" : "SUSPENDED",
@@ -35,22 +32,7 @@ export default function CompaniesPage() {
     finally { setLoading(false); }
   };
 
-  const handleToggleStatus = async (id, currentStatus) => {
-    const newRole = currentStatus === "ACTIVE" ? "WAITRESS" : "ADMIN";
-    try {
-      const res = await fetch("/api/update-role", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: id, role: newRole }),
-      });
-      const result = await res.json();
-      if (!res.ok) { showToast(result.error || "Failed to update company role", "error"); return; }
-      await loadData();
-      showToast(newRole === "ADMIN" ? "Company re-activated." : "Company suspended.", newRole === "ADMIN" ? "success" : "warning");
-    } catch (err) {
-      showToast(err.message, "error");
-    }
-  };
+
 
   const handleDelete = async (id, name) => {
     try {
@@ -147,14 +129,14 @@ export default function CompaniesPage() {
                 <tr className={`border-b text-zinc-400 font-bold uppercase tracking-wider ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
                   <th className="p-4 sm:p-5">Company</th>
                   <th className="p-4 sm:p-5">Email</th>
-                  <th className="p-4 sm:p-5">Status</th>
+
                   <th className="p-4 sm:p-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className={`divide-y font-medium ${darkMode ? "divide-white/[0.04] text-zinc-300" : "divide-black/5 text-zinc-700"}`}>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
+                    <td colSpan={3} className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
                       No companies found matching your search.
                     </td>
                   </tr>
@@ -173,27 +155,10 @@ export default function CompaniesPage() {
                       </div>
                     </td>
                     <td className="p-4 sm:p-5">{company.email || company.phone || "—"}</td>
-                    <td className="p-4 sm:p-5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
-                        company.status === "ACTIVE"
-                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                          : "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                      }`}>
-                        {company.status === "ACTIVE" ? "Active" : "Suspended"}
-                      </span>
-                    </td>
+
                     <td className="p-4 sm:p-5 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleToggleStatus(company.id, company.status)}
-                          className={`px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer border ${
-                            company.status === "ACTIVE"
-                              ? "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
-                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
-                          }`}
-                        >
-                          {company.status === "ACTIVE" ? "Suspend" : "Activate"}
-                        </button>
+
                         <button
                           onClick={() => handleDelete(company.id, company.full_name || "Company")}
                           className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 border"

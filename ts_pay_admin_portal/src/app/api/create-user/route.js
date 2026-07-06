@@ -2,7 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request) {
   try {
-    const { email, password, fullName, role, phone, ownerName, address, description } = await request.json();
+    const body = await request.json();
+    const { email, password, fullName, role, phone, ownerName, address, description, cafeId } = body;
+
+    console.log("=== CREATE USER DEBUG ===");
+    console.log("Received body:", JSON.stringify(body, null, 2));
+    console.log("cafeId value:", cafeId, "type:", typeof cafeId);
 
     if (!email || !password || !fullName) {
       return Response.json({ error: "Email, password, and name are required" }, { status: 400 });
@@ -25,6 +30,7 @@ export async function POST(request) {
         owner_name: ownerName || null,
         address: address || null,
         description: description || null,
+        cafe_id: cafeId || null,
       },
     });
 
@@ -44,6 +50,7 @@ export async function POST(request) {
         owner_name: ownerName || null,
         address: address || null,
         description: description || null,
+        cafe_id: cafeId || (role === "ADMIN" ? userData.user.id : null),
       });
 
     if (profileError) {
