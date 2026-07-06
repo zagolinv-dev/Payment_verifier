@@ -224,7 +224,7 @@ class ReceiptPdfExport {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      scannerName,
+                      _safe(scannerName),
                       style: pw.TextStyle(
                         fontSize: 13,
                         fontWeight: pw.FontWeight.bold,
@@ -464,6 +464,15 @@ class ReceiptPdfExport {
     return pdf.save();
   }
 
+  /// Strip non-ASCII characters so the default PDF font always renders cleanly.
+  static String _safe(String s) =>
+      s.replaceAll(RegExp(r'[^\x00-\x7F]'), '?');
+
+  static String _pdfDateTime(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')} '
+      '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+
+  /// Plain ASCII currency format safe for PDF rendering (no locale-specific symbols)
   static String _pdfMoney(double amount) {
     return 'Br ${amount.toStringAsFixed(2)}';
   }
@@ -481,7 +490,7 @@ class ReceiptPdfExport {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
-        text,
+        _safe(text),
         style: pw.TextStyle(
           fontSize: 9,
           fontWeight: pw.FontWeight.bold,
@@ -495,21 +504,22 @@ class ReceiptPdfExport {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(5),
       child: pw.Text(
-        text,
+        _safe(text),
         style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800),
       ),
     );
   }
 
+  /// Tip cell — bold so tips are visually distinct
   static pw.Widget _tipCell(String text) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(5),
       child: pw.Text(
-        text,
+        _safe(text),
         style: pw.TextStyle(
           fontSize: 8,
           fontWeight: pw.FontWeight.bold,
-          color: PdfColors.amber,
+          color: PdfColors.grey800,
         ),
       ),
     );
