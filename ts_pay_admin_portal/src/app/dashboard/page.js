@@ -66,7 +66,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 sm:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
           <MetricCard darkMode={darkMode} title="Failed" value={metrics.failedCount} subtitle={`${metrics.totalTransactions ? ((metrics.failedCount / metrics.totalTransactions) * 100).toFixed(1) : 0}% failure`} icon={FailedIcon} />
           <MetricCard darkMode={darkMode} title="Transactions" value={metrics.totalTransactions} subtitle={`${metrics.verifiedCount} verified`} icon={ActivityIcon} />
           <MetricCard darkMode={darkMode} title="Pending" value={metrics.pendingCount} subtitle="awaiting review" icon={PendingIcon} />
@@ -207,10 +207,10 @@ function MetricCard({ darkMode, title, value, subtitle, icon: Icon }) {
       <div className="relative flex items-start justify-between mb-3">
         <div className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>{title}</div>
         {Icon && (
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+          <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center ${
             darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"
           }`}>
-            <Icon className="w-4 h-4" />
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         )}
       </div>
