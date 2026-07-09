@@ -39,7 +39,7 @@ export default function ApprovalsPage() {
       return;
     }
     if (approvePassword.length < 6) {
-      showToast("Password must be at least 6 characters.", "error");
+      showToast("The Password must be at least 6 characters.", "error");
       return;
     }
 
