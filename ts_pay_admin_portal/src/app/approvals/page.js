@@ -17,19 +17,20 @@ export default function ApprovalsPage() {
   const [settingPassword, setSettingPassword] = useState(false);
   const [approvedMerchant, setApprovedMerchant] = useState(null);
 
-  useEffect(() => { loadMerchants(); }, []);
+  useEffect(() => {
+    const loadMerchants = async () => {
+      try {
+        const { data } = await supabase.from("profiles").select("*").eq("status", "PENDING");
+        setMerchants(data || []);
+      } catch (err) { console.error("Failed to load merchants:", err); }
+      finally { setLoading(false); }
+    };
+    loadMerchants();
+  }, []);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast({ message: "", type: "info" }), 4000);
-  };
-
-  const loadMerchants = async () => {
-    try {
-      const { data } = await supabase.from("profiles").select("*").eq("status", "PENDING");
-      setMerchants(data || []);
-    } catch (err) { console.error("Failed to load merchants:", err); }
-    finally { setLoading(false); }
   };
 
   const handleApprove = async (id, merchant) => {
@@ -60,7 +61,7 @@ export default function ApprovalsPage() {
       });
       const result = await res.json();
       if (!res.ok) {
-        showToast("Failed: " + (result.error || "unknown error"), "error");
+        showToast("Failed: " + (result.error || "unknown error,lets try again"), "error");
         setSettingPassword(false);
         return;
       }
