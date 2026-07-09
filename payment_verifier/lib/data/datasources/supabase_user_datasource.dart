@@ -20,10 +20,16 @@ class SupabaseUserDatasource {
         .map((e) => UserProfileModel.fromJson(e))
         .toList();
     } catch (_) {
-      final response = await _client
-        .from(AppConstants.profilesTable)
-        .select()
-        .order('created_at', ascending: false);
+      final response = scopeOwnerId == null
+        ? await _client
+            .from(AppConstants.profilesTable)
+            .select()
+            .order('created_at', ascending: false)
+        : await _client
+            .from(AppConstants.profilesTable)
+            .select()
+            .or('id.eq.$scopeOwnerId,owner_id.eq.$scopeOwnerId')
+            .order('created_at', ascending: false);
       return (response as List)
         .map((e) => UserProfileModel.fromJson(e))
         .toList();

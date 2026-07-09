@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/data/datasources/supabase_auth_datasource.dart';
 import 'package:payment_verifier/data/datasources/supabase_user_datasource.dart';
 import 'package:payment_verifier/domain/entities/user_profile_entity.dart';
@@ -24,7 +25,7 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> updateRole(String userId, String roleStr) async {
     try {
-      final scopeOwnerId = _scopeOwnerId;
+      final scopeOwnerId = await _scopeOwnerId;
       await _ds.updateUserRole(userId, roleStr, ownerId: scopeOwnerId);
       return true;
     } catch (_) {
@@ -56,7 +57,7 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> deleteUser(String userId) async {
     try {
-      await _ds.deleteUser(userId, ownerId: _scopeOwnerId);
+      await _ds.deleteUser(userId, ownerId: await _scopeOwnerId);
       return true;
     } catch (_) {
       return false;
@@ -76,10 +77,19 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  String? get _scopeOwnerId {
+  Future<String?> get _scopeOwnerId async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return null;
-    return user.id;
+    try {
+      final response = await Supabase.instance.client
+          .from(AppConstants.profilesTable)
+          .select('owner_id')
+          .eq('id', user.id)
+          .single();
+      return response['owner_id'] as String? ?? user.id;
+    } catch (_) {
+      return user.id;
+    }
   }
 }
 

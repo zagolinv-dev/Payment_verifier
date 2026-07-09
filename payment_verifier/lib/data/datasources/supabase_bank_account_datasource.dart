@@ -35,10 +35,13 @@ class SupabaseBankAccountDatasource {
           .map((e) => BankAccountModel.fromJson(e))
           .toList();
     } catch (_) {
-      final response = await _client
+      var fallbackQuery = _client
           .from(AppConstants.bankAccountsTable)
-          .select()
-          .order('created_at', ascending: false);
+          .select();
+      if (scopeOwnerId != null) {
+        fallbackQuery = fallbackQuery.eq('owner_id', scopeOwnerId);
+      }
+      final response = await fallbackQuery.order('created_at', ascending: false);
       return (response as List)
           .map((e) => BankAccountModel.fromJson(e))
           .toList();

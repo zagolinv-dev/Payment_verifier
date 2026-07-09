@@ -473,10 +473,15 @@ class _RevenueLineChart extends StatelessWidget {
   final Map<String, double> weeklyTotals;
   final List<TransactionEntity> allTransactions;
 
-  List<FlSpot> get _spots {
+  ({List<FlSpot> spots, double maxValue}) _chartData() {
     if (period == 'Weekly') {
       final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return List.generate(7, (i) => FlSpot(i.toDouble(), (weeklyTotals[dayNames[i]] ?? 0) * progress));
+      final values = dayNames.map((d) => weeklyTotals[d] ?? 0).toList();
+      final maxVal = values.reduce((a, b) => a > b ? a : b);
+      return (
+        spots: List.generate(7, (i) => FlSpot(i.toDouble(), values[i] * progress)),
+        maxValue: maxVal,
+      );
     }
 
     final now = DateTime.now();
@@ -489,7 +494,10 @@ class _RevenueLineChart extends StatelessWidget {
         }
       }
       final maxVal = totals.reduce((a, b) => a > b ? a : b);
-      return List.generate(10, (i) => FlSpot(i.toDouble(), (maxVal > 0 ? totals[i] / maxVal : 0) * 12000 * progress));
+      return (
+        spots: List.generate(10, (i) => FlSpot(i.toDouble(), totals[i] * progress)),
+        maxValue: maxVal,
+      );
     }
 
     if (period == 'Monthly') {
@@ -500,7 +508,10 @@ class _RevenueLineChart extends StatelessWidget {
         }
       }
       final maxVal = totals.reduce((a, b) => a > b ? a : b);
-      return List.generate(12, (i) => FlSpot(i.toDouble(), (maxVal > 0 ? totals[i] / maxVal : 0) * 12000 * progress));
+      return (
+        spots: List.generate(12, (i) => FlSpot(i.toDouble(), totals[i] * progress)),
+        maxValue: maxVal,
+      );
     }
 
     if (period == 'Yearly') {
@@ -509,11 +520,15 @@ class _RevenueLineChart extends StatelessWidget {
         totals[tx.createdAt.year] = (totals[tx.createdAt.year] ?? 0) + tx.amount + tx.tip;
       }
       final years = totals.keys.toList()..sort();
-      final maxVal = totals.values.reduce((a, b) => a > b ? a : b);
-      return List.generate(years.length, (i) => FlSpot(i.toDouble(), (maxVal > 0 ? (totals[years[i]]! / maxVal) : 0) * 12000 * progress));
+      final values = years.map((y) => totals[y]!).toList();
+      final maxVal = values.reduce((a, b) => a > b ? a : b);
+      return (
+        spots: List.generate(years.length, (i) => FlSpot(i.toDouble(), values[i] * progress)),
+        maxValue: maxVal,
+      );
     }
 
-    return [];
+    return (spots: const [], maxValue: 0);
   }
 
   List<String> _bottomLabels() {
@@ -535,20 +550,43 @@ class _RevenueLineChart extends StatelessWidget {
     return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   }
 
+  static double _niceInterval(double max) {
+    if (max <= 0) return 200;
+    final rough = max / 5;
+    final magnitude = math.pow(10, (math.log(rough) / math.ln10).floor()).toDouble();
+    final normalized = rough / magnitude;
+    if (normalized <= 1.5) return magnitude;
+    if (normalized <= 3.5) return magnitude * 2;
+    if (normalized <= 7.5) return magnitude * 5;
+    return magnitude * 10;
+  }
+
+  static String _formatValue(double v) {
+    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
+    if (v >= 1000) return '${(v / 1000).toStringAsFixed(v % 1000 == 0 ? 0 : 1)}k';
+    return v.toStringAsFixed(0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final gridColor = isDark
         ? AppTheme.borderSubtle
         : AppTheme.lightBorderSubtle;
 
+    final data = _chartData();
+    final chartMax = data.maxValue > 0 ? data.maxValue * 1.3 : 1000.0;
+    final interval = _niceInterval(chartMax);
+
     return SizedBox(
       height: 160,
       child: LineChart(
         LineChartData(
+          minY: 0,
+          maxY: chartMax,
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            horizontalInterval: 4000,
+            horizontalInterval: interval,
             getDrawingHorizontalLine: (_) => FlLine(
               color: gridColor,
               strokeWidth: 1,
@@ -559,9 +597,9 @@ class _RevenueLineChart extends StatelessWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 44,
-                interval: 4000,
+                interval: interval,
                 getTitlesWidget: (v, _) => Text(
-                  '${(v / 1000).toStringAsFixed(0)}k',
+                  _formatValue(v),
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     color: isDark
@@ -596,7 +634,7 @@ class _RevenueLineChart extends StatelessWidget {
           borderData: FlBorderData(show: false),
           lineBarsData: [
             LineChartBarData(
-              spots: _spots,
+              spots: data.spots,
               isCurved: true,
               curveSmoothness: 0.35,
               color: AppTheme.primaryGreen,

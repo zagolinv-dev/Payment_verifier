@@ -49,10 +49,13 @@ class SupabaseTransactionDatasource {
           .map((e) => TransactionModel.fromJson(e))
           .toList();
     } catch (_) {
-      final response = await _client
+      var fallbackQuery = _client
           .from(AppConstants.transactionsTable)
-          .select()
-          .order('created_at', ascending: false);
+          .select();
+      if (scopeOwnerId != null) {
+        fallbackQuery = fallbackQuery.eq('owner_id', scopeOwnerId);
+      }
+      final response = await fallbackQuery.order('created_at', ascending: false);
       transactions = (response as List)
           .map((e) => TransactionModel.fromJson(e))
           .toList();
@@ -113,9 +116,13 @@ class SupabaseTransactionDatasource {
           .map((e) => TransactionModel.fromJson(e))
           .toList();
     } catch (_) {
-      final response = await _client
+      var fallbackQuery = _client
           .from(AppConstants.transactionsTable)
-          .select()
+          .select();
+      if (scopeOwnerId != null) {
+        fallbackQuery = fallbackQuery.eq('owner_id', scopeOwnerId);
+      }
+      final response = await fallbackQuery
           .order('created_at', ascending: false)
           .limit(limit);
       var txs = (response as List)
@@ -200,14 +207,20 @@ class SupabaseTransactionDatasource {
       final allResponse = await allQuery;
       allTxs = (allResponse as List).cast<Map<String, dynamic>>();
     } catch (_) {
-      final todayResponse = await _client
-        .from(AppConstants.transactionsTable)
-        .select('amount, tip, status, created_at')
-        .gte('created_at', todayStart.toIso8601String())
-        .lt('created_at', todayEnd.toIso8601String());
-      final allResponse = await _client
-        .from(AppConstants.transactionsTable)
+      var todayFallback = _client
+          .from(AppConstants.transactionsTable)
+          .select('amount, tip, status, created_at')
+          .gte('created_at', todayStart.toIso8601String())
+          .lt('created_at', todayEnd.toIso8601String());
+      if (ownerId != null) todayFallback = todayFallback.eq('owner_id', ownerId);
+      final todayResponse = await todayFallback;
+
+      var allFallback = _client
+          .from(AppConstants.transactionsTable)
           .select('amount, tip, status, verified_by');
+      if (ownerId != null) allFallback = allFallback.eq('owner_id', ownerId);
+      final allResponse = await allFallback;
+
       todayTxs = (todayResponse as List).cast<Map<String, dynamic>>();
       allTxs = (allResponse as List).cast<Map<String, dynamic>>();
       if (userId != null) {
@@ -266,11 +279,13 @@ class SupabaseTransactionDatasource {
         if (scopeOwnerId != null) query = query.eq('owner_id', scopeOwnerId);
         return await query;
       } catch (_) {
-        return await _client
+        var fallbackQuery = _client
             .from(AppConstants.transactionsTable)
             .select('amount, created_at')
             .gte('created_at', weekStart.toIso8601String())
             .lt('created_at', weekEnd.toIso8601String());
+        if (scopeOwnerId != null) fallbackQuery = fallbackQuery.eq('owner_id', scopeOwnerId);
+        return await fallbackQuery;
       }
     })();
 
@@ -357,7 +372,11 @@ class SupabaseTransactionDatasource {
       }
       await query;
     } catch (_) {
-      await _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+      var fallbackQuery = _client.from(AppConstants.transactionsTable).delete().eq('id', id);
+      if (scopeOwnerId != null) {
+        fallbackQuery = fallbackQuery.eq('owner_id', scopeOwnerId);
+      }
+      await fallbackQuery;
     }
   }
 
