@@ -20,6 +20,7 @@ export default function UsersPage() {
   const [companies, setCompanies] = useState([]);
   const [companiesLoading, setCompaniesLoading] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "info" });
+  const [createdUserCredentials, setCreatedUserCredentials] = useState(null);
   const [editUser, setEditUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editRole, setEditRole] = useState("");
@@ -29,6 +30,7 @@ export default function UsersPage() {
   const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editCafeId, setEditCafeId] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -50,6 +52,11 @@ export default function UsersPage() {
   const showToast = (msg, type = "success") => {
     setToast({ message: msg, type });
     setTimeout(() => setToast({ message: "", type: "info" }), 4000);
+  };
+
+  const handleCopy = (text, typeLabel) => {
+    navigator.clipboard.writeText(text);
+    showToast(`${typeLabel} copied to clipboard!`, "success");
   };
 
   const loadUsers = async () => {
@@ -74,13 +81,19 @@ export default function UsersPage() {
       const result = await res.json();
       if (!res.ok) { showToast(result.error || "Failed to create user", "error"); setCreating(false); return; }
       const createdRole = newUser.role;
-      showToast(`User ${newUser.email} created successfully!`, "success");
+      const creds = {
+        name: newUser.fullName,
+        email: newUser.email,
+        password: newUser.password
+      };
+
       setShowAddModal(false);
       setNewUser({ email: "", password: "", fullName: "", role: "WAITRESS", phone: "", ownerName: "", address: "", description: "", cafeId: "" });
       await loadUsers();
       if (createdRole === "ADMIN") {
         await loadCompanies();
       }
+      setCreatedUserCredentials(creds);
     } catch (err) { showToast(err.message, "error"); }
     setCreating(false);
   };
@@ -97,6 +110,7 @@ export default function UsersPage() {
     setEditPhone(user.phone || "");
     setEditAddress(user.address || "");
     setEditDescription(user.description || "");
+    setEditCafeId(user.cafe_id || "");
     setEditPassword("");
     setShowEditPassword(false);
     setShowEditModal(true);
@@ -116,6 +130,7 @@ export default function UsersPage() {
         address: editRole === "ADMIN" ? editAddress : null,
         description: editRole === "ADMIN" ? editDescription : null,
         password: editPassword || undefined,
+        cafeId: editRole === "WAITRESS" ? editCafeId : null,
       };
       const res = await fetch("/api/update-role", {
         method: "POST",
@@ -205,6 +220,8 @@ export default function UsersPage() {
                 type="text" value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search users..."
+                autoComplete="off"
+                name="search-query"
                 className={`w-full text-xs pl-9 pr-4 py-2.5 rounded-xl border outline-none transition-all ${
                   darkMode
                     ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20"
@@ -222,16 +239,71 @@ export default function UsersPage() {
         <div className={`relative overflow-hidden rounded-2xl border transition-all ${
           darkMode ? "bg-[#0F1626]/80 backdrop-blur-xl border-white/[0.06]" : "bg-white/80 backdrop-blur-xl border-black/5 shadow-sm"
         }`}>
-          <div className="overflow-x-auto">
+
+          {/* ── Mobile card view (hidden on md+) ── */}
+          <div className="md:hidden">
+            {filtered.length === 0 ? (
+              <div className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>No users found.</div>
+            ) : (
+              <div className={`divide-y ${darkMode ? "divide-white/[0.04]" : "divide-black/5"}`}>
+                {filtered.map((user) => (
+                  <div key={user.id} className={`p-4 flex items-start gap-3 transition-colors ${darkMode ? "hover:bg-white/[0.02]" : "hover:bg-zinc-50"}`}>
+                    {/* Avatar */}
+                    <div className={`w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center text-xs font-bold ${
+                      user.role === "ADMIN"
+                        ? darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"
+                        : darkMode ? "bg-amber-500/10 text-amber-400" : "bg-amber-100 text-amber-600"
+                    }`}>
+                      {(user.full_name || "?")[0]}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-bold text-sm truncate ${darkMode ? "text-white" : "text-zinc-900"}`}>{user.full_name || "Unnamed"}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border flex-shrink-0 ${
+                          user.role === "ADMIN"
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        }`}>{user.role}</span>
+                      </div>
+                      <p className={`text-xs mt-0.5 truncate ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>{user.email}</p>
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        {user.company_name && user.company_name !== "—" && (
+                          <span className={`text-[11px] font-medium ${darkMode ? "text-zinc-300" : "text-zinc-600"}`}>{user.company_name}</span>
+                        )}
+                        <span className={`text-[11px] font-mono ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>{new Date(user.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                      <button onClick={() => handleEditClick(user)}
+                        className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 border">
+                        Edit
+                      </button>
+                      <button onClick={() => handleDeleteUser(user.id, user.email)}
+                        className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 border">
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Desktop table view (hidden on < md) ── */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className={`border-b text-zinc-400 font-bold uppercase tracking-wider ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
-                  <th className="p-4 sm:p-5">Name</th>
-                  <th className="p-4 sm:p-5">Email</th>
-                  <th className="p-4 sm:p-5">Company</th>
-                  <th className="p-4 sm:p-5">Role</th>
-                  <th className="p-4 sm:p-5">Joined</th>
-                  <th className="p-4 sm:p-5 text-right">Actions</th>
+                  <th className="p-4 lg:p-5">Name</th>
+                  <th className="p-4 lg:p-5 hidden lg:table-cell">Email</th>
+                  <th className="p-4 lg:p-5">Company</th>
+                  <th className="p-4 lg:p-5">Role</th>
+                  <th className="p-4 lg:p-5 hidden xl:table-cell">Joined</th>
+                  <th className="p-4 lg:p-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className={`divide-y font-medium ${darkMode ? "divide-white/[0.04] text-zinc-300" : "divide-black/5 text-zinc-700"}`}>
@@ -241,33 +313,37 @@ export default function UsersPage() {
                   </tr>
                 ) : filtered.map((user) => (
                   <tr key={user.id} className={`transition-colors ${darkMode ? "hover:bg-white/[0.02]" : "hover:bg-zinc-50"}`}>
-                    <td className="p-4 sm:p-5">
+                    <td className="p-4 lg:p-5">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                        <div className={`w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center text-xs font-bold ${
                           user.role === "ADMIN"
                             ? darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"
                             : darkMode ? "bg-amber-500/10 text-amber-400" : "bg-amber-100 text-amber-600"
                         }`}>
                           {(user.full_name || "?")[0]}
                         </div>
-                        <span className={`font-bold text-sm ${darkMode ? "text-white" : "text-zinc-900"}`}>{user.full_name || "Unnamed"}</span>
+                        <div className="min-w-0">
+                          <span className={`font-bold text-sm block truncate ${darkMode ? "text-white" : "text-zinc-900"}`}>{user.full_name || "Unnamed"}</span>
+                          <span className={`text-[11px] lg:hidden truncate block ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>{user.email}</span>
+                        </div>
                       </div>
                     </td>
-                    <td className="p-4 sm:p-5">{user.email}</td>
-                    <td className={`p-4 sm:p-5 ${darkMode ? "text-zinc-300" : "text-zinc-600"}`}>
-                      {user.company_name || "—"}
+                    <td className="p-4 lg:p-5 hidden lg:table-cell max-w-[160px]">
+                      <span className="block truncate">{user.email}</span>
                     </td>
-                    <td className="p-4 sm:p-5">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
+                    <td className={`p-4 lg:p-5 max-w-[120px] ${darkMode ? "text-zinc-300" : "text-zinc-600"}`}>
+                      <span className="block truncate">{user.company_name || "—"}</span>
+                    </td>
+                    <td className="p-4 lg:p-5">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border whitespace-nowrap ${
                         user.role === "ADMIN"
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-amber-500/10 text-amber-400 border-amber-500/20"
                       }`}>{user.role}</span>
                     </td>
-                    <td className={`p-4 sm:p-5 font-mono ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>{new Date(user.created_at).toLocaleDateString()}</td>
-                    <td className="p-4 sm:p-5 text-right">
+                    <td className={`p-4 lg:p-5 font-mono hidden xl:table-cell ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>{new Date(user.created_at).toLocaleDateString()}</td>
+                    <td className="p-4 lg:p-5 text-right">
                       <div className="flex items-center justify-end gap-2">
-
                         <button onClick={() => handleEditClick(user)}
                           className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 border">
                           Edit
@@ -283,6 +359,7 @@ export default function UsersPage() {
               </tbody>
             </table>
           </div>
+
         </div>
 
         {showAddModal && (
@@ -323,7 +400,7 @@ export default function UsersPage() {
                       <input type={showPassword ? "text" : "password"} value={newUser.password}
                         onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                         className={`w-full px-4 py-2.5 pr-11 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}
-                        required minLength={6} />
+                        required minLength={8} />
                       <button type="button" onClick={() => setShowPassword(!showPassword)}
                         className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"}`} tabIndex={-1}>
                         {showPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
@@ -437,28 +514,35 @@ export default function UsersPage() {
                   <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Name</label>
                   <input type="text" value={editName}
                     onChange={(e) => setEditName(e.target.value)}
+                    autoComplete="off"
+                    name="edit-user-name"
                     className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`} />
                 </div>
                 <div>
                   <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Email</label>
                   <input type="email" value={editEmail}
                     onChange={(e) => setEditEmail(e.target.value)}
+                    autoComplete="off"
+                    name="edit-user-email"
                     className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`} />
                 </div>
-                <div>
-                  <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Role</label>
-                  {editUser.role === "ADMIN" ? (
-                    <div className={`w-full px-4 py-2.5 rounded-xl border text-sm ${darkMode ? "bg-[#080E1A] border-white/10 text-zinc-400" : "bg-zinc-50 border-black/10 text-zinc-500"}`}>
-                      Admin (Manager) — cannot change to Waitress
-                    </div>
-                  ) : (
-                    <select value={editRole} onChange={(e) => setEditRole(e.target.value)}
-                      className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}>
-                      <option value="WAITRESS">Waitress</option>
-                      <option value="ADMIN">Admin (Manager)</option>
-                    </select>
-                  )}
-                </div>
+
+                {editRole === "WAITRESS" && (
+                  <div>
+                    <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>Company</label>
+                    {companiesLoading ? (
+                      <div className={`text-xs px-4 py-2.5 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Loading companies...</div>
+                    ) : (
+                      <select value={editCafeId} onChange={(e) => setEditCafeId(e.target.value)}
+                        className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 focus:border-emerald-500/50"}`}>
+                        <option value="">Select a company...</option>
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>{c.owner_name || c.full_name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
 
                 {editRole === "ADMIN" && (
                   <div className={`border-t pt-4 ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
@@ -506,7 +590,9 @@ export default function UsersPage() {
                     <input type={showEditPassword ? "text" : "password"} value={editPassword}
                       onChange={(e) => setEditPassword(e.target.value)}
                       placeholder="Leave blank to keep current password"
-                      minLength={6}
+                      minLength={8}
+                      autoComplete="new-password"
+                      name="edit-user-password"
                       className={`w-full px-4 py-2.5 pr-11 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-[#080E1A] border-white/10 text-white placeholder-zinc-500 focus:border-emerald-500/50" : "bg-zinc-50 border-black/10 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500/50"}`} />
                     <button type="button" onClick={() => setShowEditPassword(!showEditPassword)}
                       className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors cursor-pointer ${darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-700"}`} tabIndex={-1}>
@@ -524,6 +610,71 @@ export default function UsersPage() {
                     {saving ? "Saving..." : "Save"}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {createdUserCredentials && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div className={`relative w-full max-w-md rounded-2xl overflow-hidden border shadow-2xl animate-scaleIn ${
+              darkMode ? "bg-[#0F1626] border-white/[0.06]" : "bg-white border-black/5"
+            }`}>
+              <div className={`px-6 py-5 border-b text-center ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
+                <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <CheckCircleIcon className="w-6 h-6" />
+                </div>
+                <h3 className={`text-base font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>User Created!</h3>
+                <p className={`text-xs mt-1 ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
+                  Credentials for {createdUserCredentials.name}
+                </p>
+              </div>
+              <div className="p-6 space-y-3">
+                <div className={`p-4 rounded-xl flex items-center justify-between ${darkMode ? "bg-white/[0.03]" : "bg-zinc-50"}`}>
+                  <div>
+                    <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Email</div>
+                    <div className={`text-sm font-mono font-bold ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>{createdUserCredentials.email}</div>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(createdUserCredentials.email, "Email")}
+                    className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer border font-bold text-[10px] uppercase tracking-wide flex-shrink-0 ${
+                      darkMode 
+                        ? "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10" 
+                        : "bg-white border-zinc-200 text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50"
+                    }`}
+                    title="Copy email"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <div className={`p-4 rounded-xl flex items-center justify-between ${darkMode ? "bg-white/[0.03]" : "bg-zinc-50"}`}>
+                  <div>
+                    <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Password</div>
+                    <div className={`text-sm font-mono font-bold ${darkMode ? "text-amber-400" : "text-amber-600"}`}>{createdUserCredentials.password}</div>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(createdUserCredentials.password, "Password")}
+                    className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer border font-bold text-[10px] uppercase tracking-wide flex-shrink-0 ${
+                      darkMode 
+                        ? "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10" 
+                        : "bg-white border-zinc-200 text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50"
+                    }`}
+                    title="Copy password"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className={`text-[10px] ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
+                  Share these credentials with the user. They can change the password after signing in.
+                </p>
+              </div>
+              <div className={`px-6 py-4 border-t flex justify-end ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
+                <button
+                  onClick={() => setCreatedUserCredentials(null)}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                >
+                  Done
+                </button>
               </div>
             </div>
           </div>

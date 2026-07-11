@@ -59,60 +59,59 @@ export default function NotificationBell({ darkMode }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const { data: dbNotes } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-
-      if (dbNotes && dbNotes.length > 0) {
-        const newIds = new Set(dbNotes.map((n) => n.id));
-        const prevIds = prevIdsRef.current;
-        if (prevIds.size > 0) {
-          dbNotes.forEach((n) => {
-            if (!prevIds.has(n.id) && !notifiedIdsRef.current.has(n.id)) {
-              notifiedIdsRef.current.add(n.id);
-              showBrowserNotification(n.title, n.message);
-            }
-          });
-        }
-        prevIdsRef.current = newIds;
-        setNotifications(dbNotes);
-        setLoading(false);
-        return;
-      }
-    } catch {}
-
-    try {
-      const [merchantResult, txResult] = await Promise.all([
-        supabase.from("merchants").select("id, created_at, business_name").eq("status", "PENDING").limit(5),
-        supabase.from("transactions").select("id, status, amount, created_at").eq("status", "FAILED").limit(5),
+      const [dbNotesResult, profileResult, txResult] = await Promise.all([
+        supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(10),
+        supabase
+          .from("profiles")
+          .select("id, created_at, full_name")
+          .eq("status", "PENDING")
+          .eq("role", "ADMIN")
+          .limit(5),
+        supabase
+          .from("transactions")
+          .select("id, status, amount, created_at")
+          .eq("status", "FAILED")
+          .limit(5),
       ]);
 
       const computed = [];
 
-      (merchantResult.data || []).forEach((m) => {
-        computed.push({
-          id: `approval-${m.id}`,
-          type: "approval",
-          title: "New Merchant Registration",
-          message: `${m.business_name || "Someone"} registered as a merchant.`,
-          is_read: false,
-          created_at: m.created_at,
+      if (dbNotesResult.data) {
+        dbNotesResult.data.forEach((n) => {
+          computed.push(n);
         });
-      });
+      }
 
-      (txResult.data || []).forEach((t) => {
-        computed.push({
-          id: `failed-${t.id}`,
-          type: "failed",
-          title: "Failed Transaction",
-          message: `${Number(t.amount).toLocaleString()} ETB transaction failed.`,
-          is_read: false,
-          created_at: t.created_at,
+      if (profileResult.data) {
+        profileResult.data.forEach((m) => {
+          computed.push({
+            id: `approval-${m.id}`,
+            type: "approval",
+            title: "New Merchant Registration",
+            message: `${m.full_name || "Someone"} registered as a merchant.`,
+            is_read: false,
+            created_at: m.created_at,
+          });
         });
-      });
+      }
+
+      if (txResult.data) {
+        txResult.data.forEach((t) => {
+          computed.push({
+            id: `failed-${t.id}`,
+            type: "failed",
+            title: "Failed Transaction",
+            message: `${Number(t.amount).toLocaleString()} ETB transaction failed.`,
+            is_read: false,
+            created_at: t.created_at,
+          });
+        });
+      }
 
       computed.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       const sliced = computed.slice(0, 10);
@@ -128,8 +127,11 @@ export default function NotificationBell({ darkMode }) {
       }
       prevIdsRef.current = newIds;
       setNotifications(sliced);
-    } catch {}
-    setLoading(false);
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const markAsRead = async (id) => {

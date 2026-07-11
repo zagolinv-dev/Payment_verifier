@@ -38,6 +38,17 @@ export async function POST(request) {
       return Response.json({ error: createError.message }, { status: 500 });
     }
 
+    const finalOwnerId = role === "WAITRESS" ? (cafeId || null) : (role === "ADMIN" ? userData.user.id : null);
+    
+    // Update user_metadata with owner_id and cafe_id now that we have user.id
+    await supabaseAdmin.auth.admin.updateUserById(userData.user.id, {
+      user_metadata: {
+        ...userData.user.user_metadata,
+        owner_id: finalOwnerId,
+        cafe_id: finalOwnerId,
+      }
+    });
+
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .upsert({
@@ -50,7 +61,8 @@ export async function POST(request) {
         owner_name: ownerName || null,
         address: address || null,
         description: description || null,
-        cafe_id: cafeId || (role === "ADMIN" ? userData.user.id : null),
+        cafe_id: finalOwnerId,
+        owner_id: finalOwnerId,
       });
 
     if (profileError) {

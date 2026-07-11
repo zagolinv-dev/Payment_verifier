@@ -13,9 +13,10 @@ export async function GET() {
   try {
     const supabaseAdmin = getAdminClient();
 
-    const [txResult, profileCountResult] = await Promise.all([
+    const [txResult, profileCountResult, pendingMerchantsResult] = await Promise.all([
       supabaseAdmin.from("transactions").select("*"),
       supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }),
+      supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).eq("role", "ADMIN").eq("status", "PENDING"),
     ]);
 
     if (txResult.error) throw new Error(txResult.error.message);
@@ -51,6 +52,7 @@ export async function GET() {
         verifiedCount,
         failedCount,
         userCount: profileCountResult.count || 0,
+        pendingMerchantCount: pendingMerchantsResult.count || 0,
       },
       weeklyData: days,
     });

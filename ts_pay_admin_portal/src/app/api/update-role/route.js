@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request) {
   try {
-    const { userId, role, fullName, email, ownerName, phone, address, description, password } = await request.json();
+    const { userId, role, fullName, email, ownerName, phone, address, description, password, cafeId } = await request.json();
 
     if (!userId || !role) {
       return Response.json({ error: "userId and role are required" }, { status: 400 });
@@ -37,6 +37,8 @@ export async function POST(request) {
       return Response.json({ error: "Failed to load auth user: " + authLookupError.message }, { status: 500 });
     }
 
+    const finalOwnerId = role === "WAITRESS" ? (cafeId || null) : (role === "ADMIN" ? userId : null);
+
     const currentMetadata = authUser?.user?.user_metadata || {};
     const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
       user_metadata: {
@@ -47,6 +49,8 @@ export async function POST(request) {
         phone: phone || currentMetadata.phone,
         address: address || currentMetadata.address,
         description: description || currentMetadata.description,
+        owner_id: finalOwnerId,
+        cafe_id: finalOwnerId,
       },
     });
 
@@ -58,6 +62,8 @@ export async function POST(request) {
       role,
       full_name: fullName,
       email,
+      owner_id: finalOwnerId,
+      cafe_id: finalOwnerId,
     };
     if (role === "ADMIN") {
       profileUpdate.owner_name = ownerName || null;

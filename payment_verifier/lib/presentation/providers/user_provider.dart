@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:payment_verifier/core/constants/app_constants.dart';
-import 'package:payment_verifier/data/datasources/supabase_auth_datasource.dart';
 import 'package:payment_verifier/data/datasources/supabase_user_datasource.dart';
 import 'package:payment_verifier/domain/entities/user_profile_entity.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
@@ -39,16 +38,23 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
     required String password,
   }) async {
     try {
-      final authDs = SupabaseAuthDatasource(Supabase.instance.client);
       final ownerId = Supabase.instance.client.auth.currentUser?.id;
-      await authDs.signUp(
-        email: email,
-        password: password,
-        fullName: fullName,
-        role: 'WAITRESS',
-        ownerId: ownerId,
+      if (ownerId == null) return 'Not authenticated';
+
+      await Supabase.instance.client.functions.invoke(
+        'create-waiter',
+        body: {
+          'fullName': fullName,
+          'email': email,
+          'password': password,
+          'ownerId': ownerId,
+        },
       );
+
       return null;
+    } on FunctionException catch (e) {
+      debugPrint('[addWaiter Error] $e');
+      return e.details?.toString() ?? 'Failed to create waiter';
     } catch (e) {
       debugPrint('[addWaiter Error] $e');
       return e.toString().replaceFirst('Exception: ', '');

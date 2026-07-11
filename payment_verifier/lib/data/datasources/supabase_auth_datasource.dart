@@ -96,8 +96,31 @@ class SupabaseAuthDatasource {
           .select()
           .eq('id', userId)
           .single();
-      final data = response;
+      final Map<String, dynamic> data = Map<String, dynamic>.from(response);
       data['email'] = email;
+
+      final role = data['role'] as String?;
+      final ownerId = data['owner_id'] as String?;
+      final cafeId = data['cafe_id'] as String?;
+      // Use owner_id first, then fall back to cafe_id for resolving the cafe name
+      final lookupId = ownerId ?? cafeId;
+
+      if (role == 'WAITRESS' && lookupId != null) {
+        try {
+          final ownerProfile = await _client
+              .from(AppConstants.profilesTable)
+              .select('full_name, owner_name')
+              .eq('id', lookupId)
+              .single();
+          // Prefer owner_name (cafe/company name) over full_name (owner's personal name)
+          data['company_name'] = (ownerProfile['owner_name'] as String?)?.isNotEmpty == true
+              ? ownerProfile['owner_name'] as String?
+              : ownerProfile['full_name'] as String?;
+        } catch (_) {}
+      } else if (role == 'ADMIN') {
+        data['company_name'] = data['owner_name'] ?? data['full_name'];
+      }
+
       return UserProfileModel.fromJson(data);
     } catch (_) {
       return UserProfileModel(

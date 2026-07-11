@@ -30,7 +30,12 @@ export async function GET(request) {
     const profiles = data || [];
 
     // Enrich waitress profiles with their cafe's company name
-    const cafeIds = [...new Set(profiles.filter(p => p.cafe_id && p.role === "WAITRESS").map(p => p.cafe_id))];
+    // Use cafe_id if set, otherwise fall back to owner_id (for older profiles)
+    const cafeIds = [...new Set(
+      profiles
+        .filter(p => p.role === "WAITRESS" && (p.cafe_id || p.owner_id))
+        .map(p => p.cafe_id || p.owner_id)
+    )];
     let cafeMap = {};
     if (cafeIds.length > 0) {
       const { data: cafes } = await supabaseAdmin
@@ -44,7 +49,9 @@ export async function GET(request) {
 
     const enriched = profiles.map(p => ({
       ...p,
-      company_name: p.role === "WAITRESS" ? (cafeMap[p.cafe_id] || "—") : (p.owner_name || p.full_name || "—"),
+      company_name: p.role === "WAITRESS"
+        ? (cafeMap[p.cafe_id || p.owner_id] || "—")
+        : (p.owner_name || p.full_name || "—"),
     }));
 
     return Response.json({ profiles: enriched });

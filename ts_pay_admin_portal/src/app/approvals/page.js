@@ -33,6 +33,11 @@ export default function ApprovalsPage() {
     setTimeout(() => setToast({ message: "", type: "info" }), 4000);
   };
 
+  const handleCopy = (text, typeLabel) => {
+    navigator.clipboard.writeText(text);
+    showToast(`${typeLabel} copied to clipboard!`, "success");
+  };
+
   const handleApprove = async (id, merchant) => {
     if (!approveEmail || !approvePassword) {
       showToast("Please enter both email and password for the merchant.", "error");
@@ -319,13 +324,39 @@ export default function ApprovalsPage() {
               </p>
             </div>
             <div className="p-6 space-y-3">
-              <div className={`p-4 rounded-xl ${darkMode ? "bg-white/[0.03]" : "bg-zinc-50"}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Email</div>
-                <div className={`text-sm font-mono font-bold ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>{approvedMerchant.email}</div>
+              <div className={`p-4 rounded-xl flex items-center justify-between ${darkMode ? "bg-white/[0.03]" : "bg-zinc-50"}`}>
+                <div>
+                  <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Email</div>
+                  <div className={`text-sm font-mono font-bold ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>{approvedMerchant.email}</div>
+                </div>
+                <button
+                  onClick={() => handleCopy(approvedMerchant.email, "Email")}
+                  className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer border font-bold text-[10px] uppercase tracking-wide flex-shrink-0 ${
+                    darkMode 
+                      ? "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10" 
+                      : "bg-white border-zinc-200 text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50"
+                  }`}
+                  title="Copy email"
+                >
+                  Copy
+                </button>
               </div>
-              <div className={`p-4 rounded-xl ${darkMode ? "bg-white/[0.03]" : "bg-zinc-50"}`}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Password</div>
-                <div className={`text-sm font-mono font-bold ${darkMode ? "text-amber-400" : "text-amber-600"}`}>{approvedMerchant.password}</div>
+              <div className={`p-4 rounded-xl flex items-center justify-between ${darkMode ? "bg-white/[0.03]" : "bg-zinc-50"}`}>
+                <div>
+                  <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>Password</div>
+                  <div className={`text-sm font-mono font-bold ${darkMode ? "text-amber-400" : "text-amber-600"}`}>{approvedMerchant.password}</div>
+                </div>
+                <button
+                  onClick={() => handleCopy(approvedMerchant.password, "Password")}
+                  className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer border font-bold text-[10px] uppercase tracking-wide flex-shrink-0 ${
+                    darkMode 
+                      ? "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10" 
+                      : "bg-white border-zinc-200 text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50"
+                  }`}
+                  title="Copy password"
+                >
+                  Copy
+                </button>
               </div>
               <p className={`text-[10px] ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>
                 Share these credentials with the merchant. They can change the password after signing in.

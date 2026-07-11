@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -89,7 +89,20 @@ class DashboardScreen extends ConsumerWidget {
                             'Hello, ${user?.displayName ?? 'there'}',
                             style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w700, color: textPrimary),
                           ),
-                          const SizedBox(height: 2),
+                          if (user?.role == UserRole.waitress && user?.companyName != null) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(Icons.storefront_rounded, size: 14, color: AppTheme.primaryGreen),
+                                const SizedBox(width: 4),
+                                Text(
+                                  user!.companyName!,
+                                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.primaryGreen),
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 4),
                           Text(AppFormatters.formatDate(DateTime.now()), style: GoogleFonts.inter(fontSize: 13, color: textSecondary)),
                         ],
                       ),

@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [metrics, setMetrics] = useState({
     totalAmount: 0, totalTransactions: 0,
     pendingCount: 0, verifiedCount: 0, failedCount: 0, userCount: 0,
+    pendingMerchantCount: 0,
   });
   const [weeklyData, setWeeklyData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +70,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5">
           <MetricCard darkMode={darkMode} title="Failed" value={metrics.failedCount} subtitle={`${metrics.totalTransactions ? ((metrics.failedCount / metrics.totalTransactions) * 100).toFixed(1) : 0}% failure`} icon={FailedIcon} />
           <MetricCard darkMode={darkMode} title="Transactions" value={metrics.totalTransactions} subtitle={`${metrics.verifiedCount} verified`} icon={ActivityIcon} />
-          <MetricCard darkMode={darkMode} title="Pending" value={metrics.pendingCount} subtitle="awaiting review" icon={PendingIcon} />
+          <MetricCard darkMode={darkMode} title="Pending" value={metrics.pendingMerchantCount} subtitle="awaiting review" icon={PendingIcon} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

@@ -123,14 +123,44 @@ export default function CompaniesPage() {
         <div className={`relative overflow-hidden rounded-2xl border transition-all ${
           darkMode ? "bg-[#0F1626]/80 backdrop-blur-xl border-white/[0.06]" : "bg-white/80 backdrop-blur-xl border-black/5 shadow-sm"
         }`}>
-          <div className="overflow-x-auto">
+
+          {/* ── Mobile card view (hidden on md+) ── */}
+          <div className="md:hidden">
+            {filtered.length === 0 ? (
+              <div className={`p-8 text-center text-xs ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>No companies found matching your search.</div>
+            ) : (
+              <div className={`divide-y ${darkMode ? "divide-white/[0.04]" : "divide-black/5"}`}>
+                {filtered.map((company) => (
+                  <div key={company.id} className={`p-4 flex items-center gap-3 transition-colors ${darkMode ? "hover:bg-white/[0.02]" : "hover:bg-zinc-50"}`}>
+                    <div className={`w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center text-xs font-bold ${
+                      darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"
+                    }`}>
+                      {(company.full_name || "?")[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className={`font-bold text-sm block truncate ${darkMode ? "text-white" : "text-zinc-900"}`}>{company.full_name || "Unnamed"}</span>
+                      <span className={`text-xs block truncate ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>{company.email || company.phone || "—"}</span>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(company.id, company.full_name || "Company")}
+                      className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 border flex-shrink-0"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Desktop table view (hidden on < md) ── */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className={`border-b text-zinc-400 font-bold uppercase tracking-wider ${darkMode ? "border-white/[0.06]" : "border-black/5"}`}>
-                  <th className="p-4 sm:p-5">Company</th>
-                  <th className="p-4 sm:p-5">Email</th>
-
-                  <th className="p-4 sm:p-5 text-right">Actions</th>
+                  <th className="p-4 lg:p-5">Company</th>
+                  <th className="p-4 lg:p-5">Email</th>
+                  <th className="p-4 lg:p-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className={`divide-y font-medium ${darkMode ? "divide-white/[0.04] text-zinc-300" : "divide-black/5 text-zinc-700"}`}>
@@ -142,9 +172,9 @@ export default function CompaniesPage() {
                   </tr>
                 ) : filtered.map((company) => (
                   <tr key={company.id} className={`transition-colors ${darkMode ? "hover:bg-white/[0.02]" : "hover:bg-zinc-50"}`}>
-                    <td className="p-4 sm:p-5">
+                    <td className="p-4 lg:p-5">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                        <div className={`w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center text-xs font-bold ${
                           darkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-600"
                         }`}>
                           {(company.full_name || "?")[0]}
@@ -154,11 +184,9 @@ export default function CompaniesPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="p-4 sm:p-5">{company.email || company.phone || "—"}</td>
-
-                    <td className="p-4 sm:p-5 text-right">
+                    <td className="p-4 lg:p-5">{company.email || company.phone || "—"}</td>
+                    <td className="p-4 lg:p-5 text-right">
                       <div className="flex items-center justify-end gap-2">
-
                         <button
                           onClick={() => handleDelete(company.id, company.full_name || "Company")}
                           className="px-3 py-1.5 rounded-lg font-bold text-[10px] tracking-wide transition-all cursor-pointer bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 border"
@@ -172,6 +200,7 @@ export default function CompaniesPage() {
               </tbody>
             </table>
           </div>
+
         </div>
       </div>
     </DashboardLayout>
