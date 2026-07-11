@@ -14,14 +14,10 @@ import 'package:payment_verifier/presentation/providers/user_provider.dart';
 import 'package:payment_verifier/presentation/widgets/status_chip.dart';
 import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
 import 'package:flutter/services.dart';
-import 'package:payment_verifier/presentation/providers/auth_provider.dart';
-
-// ── Providers ─────────────────────────────────────────────────────────────────
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 final waiterTransactionsProvider =
     FutureProvider.family<List<TransactionEntity>, String>((ref, waiterId) async {
-  // Query directly filtered by waiterId — does NOT depend on transactionsProvider
-  // so the admin's global view doesn't bleed through.
   final repo = ref.read(transactionRepositoryProvider);
   final txs = await repo.getTransactions(userId: waiterId);
   return txs
@@ -29,8 +25,6 @@ final waiterTransactionsProvider =
       .toList()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 });
-
-// ── Screen ────────────────────────────────────────────────────────────────────
 
 class WaiterDetailScreen extends ConsumerStatefulWidget {
   const WaiterDetailScreen({
@@ -51,6 +45,8 @@ class WaiterDetailScreen extends ConsumerStatefulWidget {
 class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
   String _chartPeriod = 'Weekly';
   bool _deleting = false;
+  bool _exportingPdf = false;
+  bool _isRefreshing = false;
 
   List<TransactionEntity> _filterByPeriod(List<TransactionEntity> txs, String period) {
     final now = DateTime.now();
@@ -114,10 +110,24 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
   }
 
   Future<void> _exportPdf(List<TransactionEntity> txs) async {
-    await ReceiptPdfExport.exportWaiterReceipts(
-      transactions: txs,
-      waiterName: widget.waiterName,
-    );
+    setState(() => _exportingPdf = true);
+    try {
+      await ReceiptPdfExport.exportWaiterReceipts(
+        transactions: txs,
+        waiterName: widget.waiterName,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to export PDF: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingPdf = false);
+    }
   }
 
   Future<void> _deleteWaiter() async {
@@ -174,171 +184,17 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
     final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
-    String newPassword = '';
-    bool isResetting = false;
-    String resetSuccessPassword = '';
-
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setState) {
-            return AlertDialog(
-              backgroundColor: card,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Row(
-                children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(
-                      color: AppTheme.warning.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.lock_reset_rounded, color: AppTheme.warning, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Text('Reset Password', style: GoogleFonts.outfit(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
-                ],
-              ),
-              content: resetSuccessPassword.isNotEmpty
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.check_circle_rounded, color: AppTheme.primaryGreen, size: 18),
-                            const SizedBox(width: 8),
-                            Text('Password reset!', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        GestureDetector(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: resetSuccessPassword));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                behavior: SnackBarBehavior.floating,
-                                backgroundColor: AppTheme.primaryGreen,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                content: Text('Password copied!', style: GoogleFonts.inter(color: Colors.white)),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.warning.withOpacity(0.2)),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    resetSuccessPassword,
-                                    style: GoogleFonts.robotoMono(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5),
-                                  ),
-                                ),
-                                const Icon(Icons.copy_rounded, size: 18, color: AppTheme.warning),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text('Tap to copy and send to ${widget.waiterName}.', style: GoogleFonts.inter(color: textSecondary, fontSize: 11)),
-                      ],
-                    )
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Set a new password for ${widget.waiterName}.',
-                          style: GoogleFonts.inter(color: textSecondary, fontSize: 13),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          onChanged: (v) => newPassword = v,
-                          style: GoogleFonts.inter(color: textPrimary),
-                          obscureText: false,
-                          decoration: InputDecoration(
-                            hintText: 'Min 8 characters',
-                            hintStyle: GoogleFonts.inter(color: textSecondary.withOpacity(0.5)),
-                            filled: true,
-                            fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: AppTheme.warning.withOpacity(0.4)),
-                            ),
-                            prefixIcon: Icon(Icons.lock_outline_rounded, color: textSecondary.withOpacity(0.5), size: 20),
-                          ),
-                        ),
-                      ],
-                    ),
-              actions: resetSuccessPassword.isNotEmpty
-                  ? [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: Text('Done', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
-                      ),
-                    ]
-                  : [
-                      TextButton(
-                        onPressed: isResetting ? null : () => Navigator.pop(ctx),
-                        child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary)),
-                      ),
-                      ElevatedButton(
-                        onPressed: isResetting || newPassword.length < 8
-                            ? null
-                            : () async {
-                                setState(() => isResetting = true);
-                                try {
-                                  final supabase = ref.read(supabaseClientProvider);
-                                  final res = await supabase.functions.invoke(
-                                    'reset-user-password',
-                                    body: {'email': widget.waiterEmail, 'newPassword': newPassword},
-                                  );
-                                  if (res.status == 200) {
-                                    setState(() => resetSuccessPassword = newPassword);
-                                  } else {
-                                    throw Exception(res.data['error'] ?? 'Unknown error');
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        behavior: SnackBarBehavior.floating,
-                                        backgroundColor: AppTheme.error,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                        content: Text('Failed: $e', style: GoogleFonts.inter(color: Colors.white)),
-                                      ),
-                                    );
-                                  }
-                                }
-                                setState(() => isResetting = false);
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.warning,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        child: isResetting
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                            : Text('Set Password', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-            );
-          },
-        );
-      },
+      builder: (ctx) => _ResetPasswordDialog(
+        waiterName: widget.waiterName,
+        waiterEmail: widget.waiterEmail,
+        isDark: isDark,
+        card: card,
+        textPrimary: textPrimary,
+        textSecondary: textSecondary,
+      ),
     );
   }
 
@@ -363,7 +219,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Receipt image with zoom
               if (tx.receiptImage != null)
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -373,7 +228,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
                     child: _buildReceiptImage(tx.receiptImage!, card),
                   ),
                 ),
-              // Details
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(20),
@@ -422,7 +276,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
                   ),
                 ),
               ),
-              // Close button
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -525,7 +378,7 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
                 Text('Failed to load', style: GoogleFonts.inter(color: textSecondary)),
                 const SizedBox(height: 12),
                 TextButton(
-                  onPressed: () => ref.refresh(waiterTransactionsProvider(widget.waiterId)),
+                  onPressed: () => ref.invalidate(waiterTransactionsProvider(widget.waiterId)),
                   child: const Text('Retry'),
                 ),
               ],
@@ -565,14 +418,16 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
     final allTipsAmt = allTxs.fold(0.0, (s, t) => s + t.tip);
 
     return RefreshIndicator(
-      onRefresh: () => ref.refresh(waiterTransactionsProvider(widget.waiterId).future),
+      onRefresh: () async {
+        ref.invalidate(waiterTransactionsProvider(widget.waiterId));
+        await Future.delayed(const Duration(milliseconds: 200));
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header ──────────────────────────────────────────────────
             Row(
               children: [
                 GestureDetector(
@@ -587,70 +442,7 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
                     child: Icon(Icons.arrow_back_rounded, size: 20, color: textPrimary),
                   ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(widget.waiterName, style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimary)),
-                      Text(widget.waiterEmail, style: GoogleFonts.inter(fontSize: 12, color: textSecondary)),
-                    ],
-                  ),
-                ),
-                // PDF export
-                GestureDetector(
-                  onTap: allTxs.isEmpty ? null : () => _exportPdf(allTxs),
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: allTxs.isEmpty ? AppTheme.textTertiary.withOpacity(0.1) : AppTheme.error.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(Icons.picture_as_pdf_rounded, color: allTxs.isEmpty ? AppTheme.textTertiary : AppTheme.error, size: 20),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Reset Password
-                GestureDetector(
-                  onTap: _showResetPasswordDialog,
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: AppTheme.warning.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.lock_reset_rounded, color: AppTheme.warning, size: 20),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Delete
-                GestureDetector(
-                  onTap: _deleting ? null : _deleteWaiter,
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: _deleting ? AppTheme.textTertiary.withOpacity(0.1) : AppTheme.error.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: _deleting
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textTertiary))
-                        : const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Refresh
-                GestureDetector(
-                  onTap: () => ref.refresh(waiterTransactionsProvider(widget.waiterId)),
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryGreen.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.refresh_rounded, color: AppTheme.primaryGreen, size: 20),
-                  ),
-                ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Container(
                   width: 44, height: 44,
                   decoration: const BoxDecoration(gradient: AppTheme.primaryGradient, shape: BoxShape.circle),
@@ -661,11 +453,90 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(widget.waiterName,
+                          style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimary),
+                          overflow: TextOverflow.ellipsis),
+                      Text(widget.waiterEmail,
+                          style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: allTxs.isEmpty || _exportingPdf ? null : () => _exportPdf(allTxs),
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: allTxs.isEmpty || _exportingPdf ? AppTheme.textTertiary.withOpacity(0.1) : AppTheme.error.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: _exportingPdf
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textTertiary))
+                            : Icon(Icons.picture_as_pdf_rounded, color: allTxs.isEmpty ? AppTheme.textTertiary : AppTheme.error, size: 18),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: _showResetPasswordDialog,
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.lock_reset_rounded, color: AppTheme.warning, size: 18),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: _deleting ? null : _deleteWaiter,
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: _deleting ? AppTheme.textTertiary.withOpacity(0.1) : AppTheme.error.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: _deleting
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textTertiary))
+                            : const Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 18),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: _isRefreshing ? null : () {
+                        setState(() => _isRefreshing = true);
+                        ref.invalidate(waiterTransactionsProvider(widget.waiterId));
+                        Future.delayed(const Duration(seconds: 1), () {
+                          if (mounted) setState(() => _isRefreshing = false);
+                        });
+                      },
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: _isRefreshing ? AppTheme.textTertiary.withOpacity(0.1) : AppTheme.primaryGreen.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: _isRefreshing
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGreen))
+                            : const Icon(Icons.refresh_rounded, color: AppTheme.primaryGreen, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 20),
 
-            // ── KPI Summary ─────────────────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -710,7 +581,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
             ),
             const SizedBox(height: 14),
 
-            // ── Period Selector ─────────────────────────────────────────
             _PeriodToggle(
               selected: _chartPeriod,
               periods: const ['Daily', 'Weekly', 'Monthly'],
@@ -723,7 +593,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
             ),
             const SizedBox(height: 14),
 
-            // ── Chart ───────────────────────────────────────────────────
             _ChartCard(
               title: 'Revenue',
               subtitle: _chartPeriod,
@@ -743,7 +612,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── Period Totals Summary ───────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -772,7 +640,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── All-Time Banner ─────────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -810,7 +677,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── Receipts Section ────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -860,8 +726,6 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
   }
 }
 
-// ── KPI Tile ──────────────────────────────────────────────────────────────────
-
 class _KpiTile extends StatelessWidget {
   const _KpiTile({
     required this.label,
@@ -899,8 +763,6 @@ class _KpiTile extends StatelessWidget {
     );
   }
 }
-
-// ── Period Toggle ─────────────────────────────────────────────────────────────
 
 class _PeriodToggle extends StatelessWidget {
   const _PeriodToggle({
@@ -959,8 +821,6 @@ class _PeriodToggle extends StatelessWidget {
   }
 }
 
-// ── Chart Card ────────────────────────────────────────────────────────────────
-
 class _ChartCard extends StatelessWidget {
   const _ChartCard({
     required this.title,
@@ -1012,8 +872,6 @@ class _ChartCard extends StatelessWidget {
     );
   }
 }
-
-// ── Revenue Bar Chart ─────────────────────────────────────────────────────────
 
 class _RevenueBarChart extends StatelessWidget {
   const _RevenueBarChart({
@@ -1105,8 +963,6 @@ class _RevenueBarChart extends StatelessWidget {
     );
   }
 }
-
-// ── Receipt Card ──────────────────────────────────────────────────────────────
 
 class _ReceiptCard extends StatelessWidget {
   const _ReceiptCard({
@@ -1214,8 +1070,6 @@ class _ReceiptCard extends StatelessWidget {
   }
 }
 
-// ── Period Total Row ──────────────────────────────────────────────────────────
-
 class _PeriodTotalRow extends StatelessWidget {
   const _PeriodTotalRow(
     this.icon,
@@ -1265,6 +1119,207 @@ class _PeriodTotalRow extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _ResetPasswordDialog extends StatefulWidget {
+  const _ResetPasswordDialog({
+    required this.waiterName,
+    required this.waiterEmail,
+    required this.isDark,
+    required this.card,
+    required this.textPrimary,
+    required this.textSecondary,
+  });
+
+  final String waiterName;
+  final String waiterEmail;
+  final bool isDark;
+  final Color card;
+  final Color textPrimary;
+  final Color textSecondary;
+
+  @override
+  State<_ResetPasswordDialog> createState() => _ResetPasswordDialogState();
+}
+
+class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
+  final _passwordController = TextEditingController();
+  bool _isResetting = false;
+  String _resetSuccessPassword = '';
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  bool get _isPasswordValid => _passwordController.text.length >= 8;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: widget.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.lock_reset_rounded, color: AppTheme.warning, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Text('Reset Password', style: GoogleFonts.outfit(color: widget.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+        ],
+      ),
+      content: _resetSuccessPassword.isNotEmpty
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: AppTheme.primaryGreen, size: 18),
+                    const SizedBox(width: 8),
+                    Text('Password reset!', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: _resetSuccessPassword));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: AppTheme.primaryGreen,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        content: Text('Password copied!', style: GoogleFonts.inter(color: Colors.white)),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: widget.isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.warning.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _resetSuccessPassword,
+                            style: GoogleFonts.robotoMono(color: widget.textPrimary, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5),
+                          ),
+                        ),
+                        const Icon(Icons.copy_rounded, size: 18, color: AppTheme.warning),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text('Tap to copy and send to ${widget.waiterName}.', style: GoogleFonts.inter(color: widget.textSecondary, fontSize: 11)),
+              ],
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Set a new password for ${widget.waiterName}.',
+                  style: GoogleFonts.inter(color: widget.textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _passwordController,
+                  onChanged: (_) => setState(() {}),
+                  style: GoogleFonts.inter(color: widget.textPrimary),
+                  obscureText: false,
+                  decoration: InputDecoration(
+                    hintText: 'Enter new password',
+                    hintStyle: GoogleFonts.inter(color: widget.textSecondary.withOpacity(0.5)),
+                    filled: true,
+                    fillColor: widget.isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: AppTheme.warning.withOpacity(0.4)),
+                    ),
+                    prefixIcon: Icon(Icons.lock_outline_rounded, color: widget.textSecondary.withOpacity(0.5), size: 20),
+                    suffixText: '${_passwordController.text.length}/8',
+                    suffixStyle: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: _isPasswordValid ? AppTheme.primaryGreen : widget.textSecondary.withOpacity(0.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+      actions: _resetSuccessPassword.isNotEmpty
+          ? [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Done', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
+              ),
+            ]
+          : [
+              TextButton(
+                onPressed: _isResetting ? null : () => Navigator.pop(context),
+                child: Text('Cancel', style: GoogleFonts.inter(color: widget.textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: _isResetting || !_isPasswordValid
+                    ? null
+                    : () async {
+                        setState(() => _isResetting = true);
+                        try {
+                          final supabase = Supabase.instance.client;
+                          final res = await supabase.functions.invoke(
+                            'reset-user-password',
+                            body: {'email': widget.waiterEmail, 'newPassword': _passwordController.text},
+                          );
+                          if (res.status == 200) {
+                            setState(() => _resetSuccessPassword = _passwordController.text);
+                          } else {
+                            final msg = res.data is Map ? (res.data as Map)['error'] : null;
+                            throw Exception(msg ?? 'Unknown error');
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: AppTheme.error,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                content: Text('Failed: $e', style: GoogleFonts.inter(color: Colors.white)),
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (mounted) setState(() => _isResetting = false);
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.warning,
+                  foregroundColor: Colors.black,
+                  disabledBackgroundColor: AppTheme.warning.withOpacity(0.4),
+                  disabledForegroundColor: Colors.black38,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: _isResetting
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : Text('Set Password', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              ),
+            ],
     );
   }
 }
