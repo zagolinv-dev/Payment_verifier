@@ -233,10 +233,13 @@ class SupabaseTransactionDatasource {
     double totalIncome = 0, totalTips = 0;
     int totalVerified = 0, totalFailed = 0;
     for (final t in allTxs) {
-      totalIncome += (t['amount'] as num).toDouble();
-      totalTips += (t['tip'] as num).toDouble();
       final status = t['status'] as String;
-      if (status == 'VERIFIED') totalVerified++;
+      // Only VERIFIED transactions count toward income
+      if (status == 'VERIFIED') {
+        totalIncome += (t['amount'] as num).toDouble();
+        totalTips += (t['tip'] as num).toDouble();
+        totalVerified++;
+      }
       if (status == 'FAILED' || status == 'FRAUD_SUSPECTED') totalFailed++;
     }
 
@@ -246,9 +249,11 @@ class SupabaseTransactionDatasource {
       final status = t['status'] as String;
       final amt = (t['amount'] as num).toDouble();
       final tip = (t['tip'] as num).toDouble();
-      if (status == 'VERIFIED') verifiedToday++;
+      if (status == 'VERIFIED') {
+        verifiedToday++;
+        todayTotal += amt + tip; // only VERIFIED counts toward today's total
+      }
       if (status == 'FAILED' || status == 'FRAUD_SUSPECTED') failedToday++;
-      todayTotal += amt + tip;
     }
 
     return DashboardMetrics(
@@ -274,7 +279,8 @@ class SupabaseTransactionDatasource {
       try {
         var query = _client
             .from(AppConstants.transactionsTable)
-            .select('amount, created_at')
+            .select('amount, created_at, status')
+            .eq('status', 'VERIFIED') // only verified in weekly chart
             .gte('created_at', weekStart.toIso8601String())
             .lt('created_at', weekEnd.toIso8601String());
         if (scopeOwnerId != null) query = query.eq('owner_id', scopeOwnerId);
@@ -282,7 +288,7 @@ class SupabaseTransactionDatasource {
       } catch (_) {
         var fallbackQuery = _client
             .from(AppConstants.transactionsTable)
-            .select('amount, created_at')
+            .select('amount, created_at, status')
             .gte('created_at', weekStart.toIso8601String())
             .lt('created_at', weekEnd.toIso8601String());
         if (scopeOwnerId != null) fallbackQuery = fallbackQuery.eq('owner_id', scopeOwnerId);
@@ -295,6 +301,8 @@ class SupabaseTransactionDatasource {
     for (final day in dayNames) totals[day] = 0;
 
     for (final t in (response as List).cast<Map<String, dynamic>>()) {
+      // Fallback path may include non-verified — filter here
+      if ((t['status'] as String?) != 'VERIFIED') continue;
       final createdAt = DateTime.parse(t['created_at'] as String);
       totals[dayNames[createdAt.weekday - 1]] =
           (totals[dayNames[createdAt.weekday - 1]]! + (t['amount'] as num).toDouble());

@@ -399,8 +399,12 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
     final periodTxs = _filterByPeriod(allTxs, _chartPeriod);
     final chartValues = _chartData(periodTxs, _chartPeriod);
 
-    final periodTotalAmt = periodTxs.fold(0.0, (s, t) => s + t.amount);
-    final allTotalAmt = allTxs.fold(0.0, (s, t) => s + t.amount);
+    // Only VERIFIED transactions count toward revenue/income
+    final verifiedTxs = allTxs.where((t) => t.status == TransactionStatus.verified).toList();
+    final periodVerified = periodTxs.where((t) => t.status == TransactionStatus.verified).toList();
+
+    final periodTotalAmt = periodVerified.fold(0.0, (s, t) => s + t.amount);
+    final allTotalAmt = verifiedTxs.fold(0.0, (s, t) => s + t.amount);
     final allCount = allTxs.length;
 
     final now = DateTime.now();
@@ -408,19 +412,19 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
     final weekStart = todayStart.subtract(Duration(days: todayStart.weekday - 1));
     final monthStart = todayStart.subtract(const Duration(days: 30));
 
-    final dailyTxs = allTxs.where((tx) => tx.createdAt.isAfter(todayStart)).toList();
-    final weeklyTxs = allTxs.where((tx) => tx.createdAt.isAfter(weekStart)).toList();
-    final monthlyTxs = allTxs.where((tx) => tx.createdAt.isAfter(monthStart)).toList();
+    final dailyTxs = verifiedTxs.where((tx) => tx.createdAt.isAfter(todayStart)).toList();
+    final weeklyTxs = verifiedTxs.where((tx) => tx.createdAt.isAfter(weekStart)).toList();
+    final monthlyTxs = verifiedTxs.where((tx) => tx.createdAt.isAfter(monthStart)).toList();
 
     final dailyTotal = dailyTxs.fold(0.0, (s, t) => s + t.amount);
     final weeklyTotal = weeklyTxs.fold(0.0, (s, t) => s + t.amount);
     final monthlyTotal = monthlyTxs.fold(0.0, (s, t) => s + t.amount);
 
-    final periodTipsAmt = periodTxs.fold(0.0, (s, t) => s + t.tip);
+    final periodTipsAmt = periodVerified.fold(0.0, (s, t) => s + t.tip);
     final dailyTips = dailyTxs.fold(0.0, (s, t) => s + t.tip);
     final weeklyTips = weeklyTxs.fold(0.0, (s, t) => s + t.tip);
     final monthlyTips = monthlyTxs.fold(0.0, (s, t) => s + t.tip);
-    final allTipsAmt = allTxs.fold(0.0, (s, t) => s + t.tip);
+    final allTipsAmt = verifiedTxs.fold(0.0, (s, t) => s + t.tip);
 
     return RefreshIndicator(
       onRefresh: () async {

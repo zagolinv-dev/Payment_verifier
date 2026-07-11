@@ -822,9 +822,11 @@ class _WaiterStatsCard extends ConsumerWidget {
     final allTxs = ref.watch(transactionsProvider).valueOrNull ?? [];
     final txs = allTxs.where((t) => t.verifiedBy == userId).toList();
     final total = txs.length;
-    final verified = txs.where((t) => t.status == TransactionStatus.verified).length;
-    final totalTips = txs.fold(0.0, (s, t) => s + t.tip);
-    final totalAmount = txs.fold(0.0, (s, t) => s + t.amount);
+    final verifiedTxs = txs.where((t) => t.status == TransactionStatus.verified).toList();
+    final verified = verifiedTxs.length;
+    // Only VERIFIED transactions count toward income and tips
+    final totalTips = verifiedTxs.fold(0.0, (s, t) => s + t.tip);
+    final totalAmount = verifiedTxs.fold(0.0, (s, t) => s + t.amount);
     final rate = total == 0 ? 0.0 : verified / total;
 
     return Container(
