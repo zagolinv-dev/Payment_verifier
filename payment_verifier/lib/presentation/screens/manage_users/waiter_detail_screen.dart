@@ -10,8 +10,11 @@ import 'package:payment_verifier/core/constants/app_constants.dart';
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
-import 'package:payment_verifier/presentation/providers/user_provider.dart';import 'package:payment_verifier/presentation/widgets/status_chip.dart';
+import 'package:payment_verifier/presentation/providers/user_provider.dart';
+import 'package:payment_verifier/presentation/widgets/status_chip.dart';
 import 'package:payment_verifier/presentation/widgets/blur_overlay.dart';
+import 'package:flutter/services.dart';
+import 'package:payment_verifier/presentation/providers/auth_provider.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
@@ -163,6 +166,180 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
       );
       if (success) Navigator.pop(context);
     }
+  }
+
+  void _showResetPasswordDialog() {
+    final isDark = ref.read(themeProvider) == ThemeMode.dark;
+    final card = isDark ? AppTheme.bgCard : AppTheme.lightCard;
+    final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textSecondary = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
+    String newPassword = '';
+    bool isResetting = false;
+    String resetSuccessPassword = '';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              backgroundColor: card,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.lock_reset_rounded, color: AppTheme.warning, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('Reset Password', style: GoogleFonts.outfit(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+              content: resetSuccessPassword.isNotEmpty
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: AppTheme.primaryGreen, size: 18),
+                            const SizedBox(width: 8),
+                            Text('Password reset!', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: resetSuccessPassword));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: AppTheme.primaryGreen,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                content: Text('Password copied!', style: GoogleFonts.inter(color: Colors.white)),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.warning.withOpacity(0.2)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    resetSuccessPassword,
+                                    style: GoogleFonts.robotoMono(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5),
+                                  ),
+                                ),
+                                const Icon(Icons.copy_rounded, size: 18, color: AppTheme.warning),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Tap to copy and send to ${widget.waiterName}.', style: GoogleFonts.inter(color: textSecondary, fontSize: 11)),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Set a new password for ${widget.waiterName}.',
+                          style: GoogleFonts.inter(color: textSecondary, fontSize: 13),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          onChanged: (v) => newPassword = v,
+                          style: GoogleFonts.inter(color: textPrimary),
+                          obscureText: false,
+                          decoration: InputDecoration(
+                            hintText: 'Min 8 characters',
+                            hintStyle: GoogleFonts.inter(color: textSecondary.withOpacity(0.5)),
+                            filled: true,
+                            fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: AppTheme.warning.withOpacity(0.4)),
+                            ),
+                            prefixIcon: Icon(Icons.lock_outline_rounded, color: textSecondary.withOpacity(0.5), size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+              actions: resetSuccessPassword.isNotEmpty
+                  ? [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text('Done', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
+                      ),
+                    ]
+                  : [
+                      TextButton(
+                        onPressed: isResetting ? null : () => Navigator.pop(ctx),
+                        child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary)),
+                      ),
+                      ElevatedButton(
+                        onPressed: isResetting || newPassword.length < 8
+                            ? null
+                            : () async {
+                                setState(() => isResetting = true);
+                                try {
+                                  final supabase = ref.read(supabaseClientProvider);
+                                  final res = await supabase.functions.invoke(
+                                    'reset-user-password',
+                                    body: {'email': widget.waiterEmail, 'newPassword': newPassword},
+                                  );
+                                  if (res.status == 200) {
+                                    setState(() => resetSuccessPassword = newPassword);
+                                  } else {
+                                    throw Exception(res.data['error'] ?? 'Unknown error');
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        behavior: SnackBarBehavior.floating,
+                                        backgroundColor: AppTheme.error,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        content: Text('Failed: $e', style: GoogleFonts.inter(color: Colors.white)),
+                                      ),
+                                    );
+                                  }
+                                }
+                                setState(() => isResetting = false);
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.warning,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: isResetting
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                            : Text('Set Password', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showReceiptDetail(TransactionEntity tx) {
@@ -430,6 +607,19 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(Icons.picture_as_pdf_rounded, color: allTxs.isEmpty ? AppTheme.textTertiary : AppTheme.error, size: 20),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Reset Password
+                GestureDetector(
+                  onTap: _showResetPasswordDialog,
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.lock_reset_rounded, color: AppTheme.warning, size: 20),
                   ),
                 ),
                 const SizedBox(width: 8),

@@ -10,6 +10,14 @@ export default function NotificationBell({ darkMode }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  
+  // Modal state
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetTargetEmail, setResetTargetEmail] = useState("");
+  const [resetTargetName, setResetTargetName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccessPassword, setResetSuccessPassword] = useState("");
   const prevIdsRef = useRef(new Set());
   const notifiedIdsRef = useRef(new Set());
   const ref = useRef();
@@ -53,6 +61,44 @@ export default function NotificationBell({ darkMode }) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  const handleOpenResetModal = (notification) => {
+    const emailMatch = notification.message.match(/\(([^)]+)\)/);
+    const email = emailMatch ? emailMatch[1] : "";
+    
+    const nameMatch = notification.message.match(/(?:Manager|Waiter)\s+([^(]+)\s+\(/);
+    const name = nameMatch ? nameMatch[1].trim() : "";
+
+    setResetTargetEmail(email);
+    setResetTargetName(name);
+    setNewPassword("");
+    setResetSuccessPassword("");
+    setResetModalOpen(true);
+    setOpen(false);
+  };
+
+  const submitResetPassword = async () => {
+    if (!newPassword || newPassword.length < 8) {
+      alert("Password must be at least 8 characters.");
+      return;
+    }
+    setIsResetting(true);
+    try {
+      const res = await supabase.functions.invoke("reset-user-password", {
+        body: { email: resetTargetEmail, newPassword }
+      });
+      if (res.error) throw new Error(res.error.message || "Unknown error");
+      setResetSuccessPassword(newPassword);
+    } catch (err) {
+      alert("Failed to reset password: " + err.message);
+    }
+    setIsResetting(false);
+  };
+
+  const copyNewPassword = () => {
+    navigator.clipboard.writeText(resetSuccessPassword);
+    alert("Password copied to clipboard!");
+  };
 
   const fetchNotifications = async () => {
     try {
@@ -275,9 +321,93 @@ export default function NotificationBell({ darkMode }) {
                         <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 mt-1.5" />
                       )}
                     </div>
+                    {n.title.includes("Password Reset Appeal") && (
+                      <div className="mt-3">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); handleOpenResetModal(n); }}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); handleOpenResetModal(n); } }}
+                          className={`w-full py-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center select-none ${
+                            darkMode ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30" : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                          }`}
+                        >
+                          Generate New Password
+                        </div>
+                      </div>
+                    )}
                   </button>
                 );
               })
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {mounted && resetModalOpen && createPortal(
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-scaleIn">
+          <div className={`relative w-full max-w-sm rounded-2xl overflow-hidden border shadow-2xl p-6 ${
+            darkMode ? "bg-[#0F1626] border-white/[0.06]" : "bg-white border-black/5"
+          }`}>
+            <h3 className={`text-base font-bold ${darkMode ? "text-white" : "text-zinc-900"}`}>Reset Password</h3>
+            <p className={`text-xs mt-1 mb-4 ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
+              Set a new password for {resetTargetName || resetTargetEmail}.
+            </p>
+
+            {!resetSuccessPassword ? (
+              <div className="space-y-4">
+                <div>
+                  <label className={`text-xs font-bold block mb-1.5 ${darkMode ? "text-zinc-400" : "text-zinc-600"}`}>New Password</label>
+                  <input 
+                    type="text" 
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min 8 characters"
+                    className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-all ${darkMode ? "bg-white/5 border-white/10 text-white focus:border-amber-500/50" : "bg-black/5 border-black/10 text-zinc-900 focus:border-amber-500/50"}`}
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button 
+                    onClick={() => setResetModalOpen(false)}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${darkMode ? "bg-white/5 text-zinc-300 hover:bg-white/10" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={submitResetPassword}
+                    disabled={isResetting}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 font-bold text-xs shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isResetting ? "Resetting..." : "Set Password"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className={`p-4 rounded-xl flex items-center justify-between ${darkMode ? "bg-white/[0.03]" : "bg-zinc-50"}`}>
+                  <div>
+                    <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${darkMode ? "text-zinc-500" : "text-zinc-400"}`}>New Password</div>
+                    <div className={`text-sm font-mono font-bold ${darkMode ? "text-amber-400" : "text-amber-600"}`}>{resetSuccessPassword}</div>
+                  </div>
+                  <button
+                    onClick={copyNewPassword}
+                    className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer border font-bold text-[10px] uppercase tracking-wide flex-shrink-0 ${
+                      darkMode 
+                        ? "bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10" 
+                        : "bg-white border-zinc-200 text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50"
+                    }`}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setResetModalOpen(false)}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-zinc-950 font-bold text-xs shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-emerald-500 transition-all cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
             )}
           </div>
         </div>,

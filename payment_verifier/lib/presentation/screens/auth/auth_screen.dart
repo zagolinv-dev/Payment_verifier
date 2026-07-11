@@ -47,7 +47,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
 
   final _forgotEmailController = TextEditingController();
   final _forgotNameController = TextEditingController();
-  final _forgotNewPasswordController = TextEditingController();
   String _forgotRole = 'Manager';
 
   bool _obscureSignInPassword = true;
@@ -76,7 +75,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     _managerDescController.dispose();
     _forgotEmailController.dispose();
     _forgotNameController.dispose();
-    _forgotNewPasswordController.dispose();
     _bgAnimController.dispose();
     super.dispose();
   }
@@ -982,7 +980,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
 
           if (_forgotRole == 'Manager') ...[
             Text(
-              'Enter your email and we\'ll send you a password reset link.',
+              'Enter your name and email. The Super Admin will be notified to reset your password.',
               style: GoogleFonts.inter(
                 fontSize: 12,
                 color: Colors.white.withOpacity(0.6),
@@ -990,7 +988,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
             ),
             const SizedBox(height: 12),
             AppTextField(
-              label: 'Email Address',
+              label: 'Your Full Name',
+              hint: 'e.g. John Manager',
+              controller: _forgotNameController,
+              prefixIcon: const Icon(Icons.person_outline_rounded, color: AppTheme.textTertiary, size: 20),
+              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            AppTextField(
+              label: 'Your Email Address',
               hint: 'manager@example.com',
               controller: _forgotEmailController,
               keyboardType: TextInputType.emailAddress,
@@ -1001,22 +1007,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                 return null;
               },
             ),
-            const SizedBox(height: 12),
-            AppTextField(
-              label: 'New Password',
-              hint: 'Enter your desired password',
-              controller: _forgotNewPasswordController,
-              obscureText: true,
-              prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppTheme.textTertiary, size: 20),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Enter a new password';
-                if (v.length < 8) return 'Minimum 8 characters';
-                return null;
-              },
-            ),
             const SizedBox(height: 16),
             GradientButton(
-              label: 'Send Reset Link',
+              label: 'Send Appeal to Super Admin',
               icon: Icons.send_rounded,
               isLoading: _isLoadingForgot,
               onPressed: _isLoadingForgot ? null : _submitManagerForgotPassword,
@@ -1052,19 +1045,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                 return null;
               },
             ),
-            const SizedBox(height: 12),
-            AppTextField(
-              label: 'New Password',
-              hint: 'Enter your desired password',
-              controller: _forgotNewPasswordController,
-              obscureText: true,
-              prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppTheme.textTertiary, size: 20),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Enter a new password';
-                if (v.length < 8) return 'Minimum 8 characters';
-                return null;
-              },
-            ),
             const SizedBox(height: 16),
             GradientButton(
               label: 'Notify My Manager',
@@ -1087,47 +1067,23 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   }
 
   Future<void> _submitManagerForgotPassword() async {
-    if (_forgotEmailController.text.trim().isEmpty || _forgotNewPasswordController.text.trim().isEmpty) return;
+    if (_forgotEmailController.text.trim().isEmpty || _forgotNameController.text.trim().isEmpty) return;
     setState(() => _isLoadingForgot = true);
     try {
       final supabase = ref.read(supabaseClientProvider);
-      final profile = await supabase
-          .from('profiles')
-          .select('role, full_name')
-          .eq('email', _forgotEmailController.text.trim())
-          .maybeSingle();
 
-      if (profile == null || profile['role'] != 'ADMIN') {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppTheme.error,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            content: Text(
-              'No manager account found with this email.',
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
-            ),
-          ),
-        );
-        setState(() => _isLoadingForgot = false);
-        return;
-      }
+      // Call the Edge Function (uses service role, bypasses RLS for unauthenticated users)
+      final res = await supabase.functions.invoke(
+        'send-reset-appeal',
+        body: {
+          'name': _forgotNameController.text.trim(),
+          'email': _forgotEmailController.text.trim(),
+          'role': 'manager',
+        },
+      );
 
-      final superAdmin = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('role', 'SUPER_ADMIN')
-          .limit(1)
-          .maybeSingle();
-
-      if (superAdmin != null) {
-        await supabase.from('notifications').insert({
-          'user_id': superAdmin['id'],
-          'type': 'info',
-          'title': 'Manager Password Reset Appeal',
-          'message': 'Manager ${profile['full_name'] ?? 'Unknown'} (${_forgotEmailController.text.trim()}) has requested to change their password to: ${_forgotNewPasswordController.text.trim()}',
-        });
+      if (res.status != 200) {
+        throw Exception(res.data?['error'] ?? 'Failed to send appeal');
       }
 
       if (!mounted) return;
@@ -1157,30 +1113,24 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
   }
 
   Future<void> _submitWaiterForgotPassword() async {
-    if (_forgotNameController.text.trim().isEmpty || _forgotEmailController.text.trim().isEmpty || _forgotNewPasswordController.text.trim().isEmpty) return;
+    if (_forgotNameController.text.trim().isEmpty || _forgotEmailController.text.trim().isEmpty) return;
     setState(() => _isLoadingForgot = true);
     try {
       final supabase = ref.read(supabaseClientProvider);
 
-      final waiterProfile = await supabase
-          .from('profiles')
-          .select('cafe_id')
-          .eq('email', _forgotEmailController.text.trim())
-          .maybeSingle();
+      // Call the Edge Function (uses service role, bypasses RLS for unauthenticated users)
+      final res = await supabase.functions.invoke(
+        'send-reset-appeal',
+        body: {
+          'name': _forgotNameController.text.trim(),
+          'email': _forgotEmailController.text.trim(),
+          'role': 'waiter',
+        },
+      );
 
-      if (waiterProfile != null && waiterProfile['cafe_id'] != null) {
-        await supabase.from('notifications').insert({
-          'user_id': waiterProfile['cafe_id'],
-          'type': 'info',
-          'title': 'Waiter Password Reset Appeal',
-          'message': 'Waiter ${_forgotNameController.text.trim()} (${_forgotEmailController.text.trim()}) has requested to change their password to: ${_forgotNewPasswordController.text.trim()}',
-        });
+      if (res.status != 200) {
+        throw Exception(res.data?['error'] ?? 'Failed to send request');
       }
-
-      await supabase.from('password_reset_requests').insert({
-        'name': _forgotNameController.text.trim(),
-        'email': _forgotEmailController.text.trim(),
-      });
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

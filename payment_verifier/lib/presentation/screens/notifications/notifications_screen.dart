@@ -5,6 +5,9 @@ import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/domain/entities/notification_entity.dart';
 import 'package:payment_verifier/presentation/providers/notification_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
+import 'package:payment_verifier/presentation/providers/auth_provider.dart';
+import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
 class NotificationsScreen extends ConsumerWidget {
@@ -192,6 +195,9 @@ class NotificationsScreen extends ConsumerWidget {
                                   ref.invalidate(notificationsProvider);
                                 }
                               },
+                              onResetPassword: n.title.contains('Password Reset Appeal')
+                                  ? () => _showResetPasswordDialog(context, ref, n, isDark, card, textPrimary, textSecondary)
+                                  : null,
                             ),
                           );
                         },
@@ -201,6 +207,150 @@ class NotificationsScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  void _showResetPasswordDialog(
+    BuildContext context,
+    WidgetRef ref,
+    NotificationEntity notification,
+    bool isDark,
+    Color card,
+    Color textPrimary,
+    Color textSecondary,
+  ) {
+    final emailMatch = RegExp(r'\(([^)]+)\)').firstMatch(notification.message);
+    final email = emailMatch?.group(1) ?? '';
+
+    final nameMatch = RegExp(r'(?:Manager|Waiter)\s+([^(]+)\s+\(').firstMatch(notification.message);
+    final name = nameMatch?.group(1)?.trim() ?? '';
+
+    String newPassword = '';
+    bool isResetting = false;
+    String resetSuccessPassword = '';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: card,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text('Reset Password', style: GoogleFonts.outfit(color: textPrimary, fontWeight: FontWeight.bold)),
+              content: resetSuccessPassword.isNotEmpty
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Password reset successful!', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(resetSuccessPassword, style: GoogleFonts.robotoMono(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+                              GestureDetector(
+                                onTap: () {
+                                  Clipboard.setData(ClipboardData(text: resetSuccessPassword));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      behavior: SnackBarBehavior.floating,
+                                      backgroundColor: AppTheme.primaryGreen,
+                                      content: Text('Password copied to clipboard!', style: GoogleFonts.inter(color: Colors.white)),
+                                    ),
+                                  );
+                                },
+                                child: const Icon(Icons.copy_rounded, size: 20, color: AppTheme.primaryGreen),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Please copy and send it to the waiter.', style: GoogleFonts.inter(color: textSecondary, fontSize: 12)),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Set a new password for ${name.isNotEmpty ? name : email}.', style: GoogleFonts.inter(color: textSecondary, fontSize: 13)),
+                        const SizedBox(height: 16),
+                        TextField(
+                          onChanged: (v) => newPassword = v,
+                          style: GoogleFonts.inter(color: textPrimary),
+                          decoration: InputDecoration(
+                            hintText: 'Min 8 characters',
+                            hintStyle: GoogleFonts.inter(color: textSecondary.withOpacity(0.5)),
+                            filled: true,
+                            fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ],
+                    ),
+              actions: resetSuccessPassword.isNotEmpty
+                  ? [
+                      TextButton(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: resetSuccessPassword));
+                          Navigator.pop(ctx);
+                        },
+                        child: Text('Done', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
+                      ),
+                    ]
+                  : [
+                      TextButton(
+                        onPressed: isResetting ? null : () => Navigator.pop(ctx),
+                        child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary)),
+                      ),
+                      TextButton(
+                        onPressed: isResetting || newPassword.length < 8
+                            ? null
+                            : () async {
+                                setState(() => isResetting = true);
+                                try {
+                                  final supabase = ref.read(supabaseClientProvider);
+                                  final res = await supabase.functions.invoke(
+                                    'reset-user-password',
+                                    body: {'email': email, 'newPassword': newPassword},
+                                  );
+                                  
+                                  if (res.status == 200) {
+                                    setState(() {
+                                      resetSuccessPassword = newPassword;
+                                    });
+                                  } else {
+                                    throw Exception(res.data['error'] ?? 'Unknown error');
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        behavior: SnackBarBehavior.floating,
+                                        backgroundColor: AppTheme.error,
+                                        content: Text('Failed: $e', style: GoogleFonts.inter(color: Colors.white)),
+                                      ),
+                                    );
+                                  }
+                                }
+                                setState(() => isResetting = false);
+                              },
+                        child: isResetting
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : Text('Set Password', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -214,12 +364,14 @@ class _NotificationTile extends StatelessWidget {
     required this.textSecondary,
     required this.borderColor,
     required this.onTap,
+    this.onResetPassword,
   });
 
   final NotificationEntity item;
   final bool isDark;
   final Color card, textPrimary, textSecondary, borderColor;
   final VoidCallback onTap;
+  final VoidCallback? onResetPassword;
 
   (IconData, Color) get _typeIcon {
     return switch (item.type) {
@@ -294,6 +446,32 @@ class _NotificationTile extends StatelessWidget {
                     '${item.createdAt.hour.toString().padLeft(2, '0')}:${item.createdAt.minute.toString().padLeft(2, '0')}',
                     style: GoogleFonts.inter(fontSize: 11, color: textSecondary.withOpacity(0.6)),
                   ),
+                  if (onResetPassword != null && !item.isRead) ...[
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () {
+                        onTap(); // Mark read
+                        onResetPassword!();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.warning.withOpacity(0.2)),
+                        ),
+                        child: Text(
+                          'Generate New Password',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.warning,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
