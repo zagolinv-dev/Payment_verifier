@@ -6,7 +6,6 @@ import 'package:payment_verifier/domain/entities/notification_entity.dart';
 import 'package:payment_verifier/presentation/providers/notification_provider.dart';
 import 'package:payment_verifier/presentation/providers/theme_provider.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
-import 'package:payment_verifier/presentation/providers/transaction_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
@@ -199,12 +198,6 @@ class NotificationsScreen extends ConsumerWidget {
                               onResetPassword: n.title.contains('Password Reset Appeal')
                                   ? () => _showResetPasswordDialog(context, ref, n, isDark, card, textPrimary, textSecondary)
                                   : null,
-                              onApprove: (n.title.contains('Needs Review') || n.type == 'warning') && n.transactionId != null
-                                  ? () => _approveTransaction(context, ref, n)
-                                  : null,
-                              onReject: (n.title.contains('Needs Review') || n.type == 'warning') && n.transactionId != null
-                                  ? () => _rejectTransaction(context, ref, n)
-                                  : null,
                             ),
                           );
                         },
@@ -215,62 +208,6 @@ class NotificationsScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  void _approveTransaction(BuildContext context, WidgetRef ref, NotificationEntity n) async {
-    try {
-      await Supabase.instance.client
-          .from('transactions')
-          .update({'status': 'VERIFIED'})
-          .eq('id', n.transactionId!);
-      await ref.read(markNotificationReadProvider)(n.id);
-      ref.invalidate(notificationsProvider);
-      ref.invalidate(dashboardMetricsProvider);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Transaction approved — added to income', style: GoogleFonts.inter(color: Colors.white)),
-            backgroundColor: AppTheme.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.error, behavior: SnackBarBehavior.floating),
-        );
-      }
-    }
-  }
-
-  void _rejectTransaction(BuildContext context, WidgetRef ref, NotificationEntity n) async {
-    try {
-      await Supabase.instance.client
-          .from('transactions')
-          .update({'status': 'FAILED'})
-          .eq('id', n.transactionId!);
-      await ref.read(markNotificationReadProvider)(n.id);
-      ref.invalidate(notificationsProvider);
-      ref.invalidate(dashboardMetricsProvider);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Transaction rejected', style: GoogleFonts.inter(color: Colors.white)),
-            backgroundColor: AppTheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.error, behavior: SnackBarBehavior.floating),
-        );
-      }
-    }
   }
 
   void _showResetPasswordDialog(
@@ -490,8 +427,6 @@ class _NotificationTile extends StatelessWidget {
     required this.borderColor,
     required this.onTap,
     this.onResetPassword,
-    this.onApprove,
-    this.onReject,
   });
 
   final NotificationEntity item;
@@ -499,8 +434,6 @@ class _NotificationTile extends StatelessWidget {
   final Color card, textPrimary, textSecondary, borderColor;
   final VoidCallback onTap;
   final VoidCallback? onResetPassword;
-  final VoidCallback? onApprove;
-  final VoidCallback? onReject;
 
   (IconData, Color) get _typeIcon {
     return switch (item.type) {
@@ -599,61 +532,6 @@ class _NotificationTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                  // Approve / Reject for NEEDS_REVIEW transactions
-                  if ((onApprove != null || onReject != null) && !item.isRead) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        if (onApprove != null)
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () { onTap(); onApprove!(); },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.success.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppTheme.success.withOpacity(0.3)),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.check_rounded, color: AppTheme.success, size: 14),
-                                    const SizedBox(width: 4),
-                                    Text('Approve', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.success)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (onApprove != null && onReject != null) const SizedBox(width: 8),
-                        if (onReject != null)
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () { onTap(); onReject!(); },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.error.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppTheme.error.withOpacity(0.3)),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.close_rounded, color: AppTheme.error, size: 14),
-                                    const SizedBox(width: 4),
-                                    Text('Reject', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.error)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
                     ),
                   ],
                 ],

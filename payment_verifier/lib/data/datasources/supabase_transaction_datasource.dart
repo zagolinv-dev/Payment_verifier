@@ -240,7 +240,7 @@ class SupabaseTransactionDatasource {
         totalTips += (t['tip'] as num).toDouble();
         totalVerified++;
       }
-      if (status == 'FAILED' || status == 'FRAUD_SUSPECTED') totalFailed++;
+      if (status == 'FAILED' || status == 'FRAUD_SUSPECTED' || status == 'NEEDS_REVIEW') totalFailed++;
     }
 
     int verifiedToday = 0, failedToday = 0;
@@ -253,7 +253,7 @@ class SupabaseTransactionDatasource {
         verifiedToday++;
         todayTotal += amt + tip; // only VERIFIED counts toward today's total
       }
-      if (status == 'FAILED' || status == 'FRAUD_SUSPECTED') failedToday++;
+      if (status == 'FAILED' || status == 'FRAUD_SUSPECTED' || status == 'NEEDS_REVIEW') failedToday++;
     }
 
     return DashboardMetrics(

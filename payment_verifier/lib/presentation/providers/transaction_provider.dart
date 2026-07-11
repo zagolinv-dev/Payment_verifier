@@ -76,7 +76,7 @@ final transactionsProvider =
   // Waiters only see their own transactions; admins see all
   final userId = (user != null && !user.isAdmin) ? user.id : null;
   return repo.getTransactions(
-    statusFilter: filters.status,
+    statusFilter: 'VERIFIED', // history always shows only verified scans
     bankFilter: filters.bank,
     searchQuery: filters.search.isEmpty ? null : filters.search,
     userId: userId,
@@ -87,9 +87,14 @@ final recentTransactionsProvider =
     FutureProvider.autoDispose<List<TransactionEntity>>((ref) async {
   final repo = ref.watch(transactionRepositoryProvider);
   final user = ref.watch(currentUserProvider);
-  // Waiters only see their own recent transactions
+  // Waiters only see their own recent transactions; always VERIFIED only
   final userId = (user != null && !user.isAdmin) ? user.id : null;
-  return repo.getRecentTransactions(limit: 5, userId: userId);
+  final txs = await repo.getRecentTransactions(limit: 20, userId: userId);
+  // Filter to VERIFIED only and take top 5
+  return txs
+      .where((t) => t.status == TransactionStatus.verified)
+      .take(5)
+      .toList();
 });
 
 final dashboardMetricsProvider =
@@ -274,15 +279,14 @@ FraudDetectionResult analyzeFraudRisk({
     score += 0.1;
   }
 
-  final status = score >= 0.7
-      ? (duplicateCount > 0
-          ? TransactionStatus.duplicate
-          : TransactionStatus.fraudSuspected)
-      : score >= 0.35
-          ? TransactionStatus.needsReview
-          : (amount < orderTotal * 0.5
+  // Simplified: any risk flags → FAILED (no NEEDS_REVIEW)
+  final status = duplicateCount > 0
+      ? TransactionStatus.duplicate
+      : score >= 0.7
+          ? TransactionStatus.fraudSuspected
+          : score > 0 || (orderTotal > 0 && amount < orderTotal)
               ? TransactionStatus.failed
-              : TransactionStatus.verified);
+              : TransactionStatus.verified;
 
   return FraudDetectionResult(
     riskScore: score,
@@ -370,7 +374,7 @@ class VerifyNotifier extends StateNotifier<VerifyState> {
             ? 'Fraud Suspected'
             : fraudAnalysis.suggestedStatus == TransactionStatus.duplicate
                 ? 'Duplicate Detected'
-                : 'Needs Review',
+                : 'Transaction Failed',
         message: fraudAnalysis.flags.isNotEmpty ? fraudAnalysis.flags.first : 'Transaction flagged',
         transactionId: tx.id,
         amount: state.amount,

@@ -166,13 +166,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  ..._statusFilters.map((f) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: _FilterChip(label: f, isSelected: filters.status == f, color: _statusColor(f), isDark: isDark, onTap: () => notifier.state = notifier.state.copyWith(status: f)),
-                      )),
-                  const SizedBox(width: 4),
-                  Container(width: 1, height: 24, color: borderColor, margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8)),
-                  const SizedBox(width: 4),
                   ..._bankFilters.map((f) => Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: _FilterChip(label: f, isSelected: filters.bank == f, color: AppTheme.pending, isDark: isDark, onTap: () => notifier.state = notifier.state.copyWith(bank: f)),
@@ -383,7 +376,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     }
   }
 
-  static const _statusFilters = ['All Status', 'VERIFIED', 'FAILED', 'NEEDS_REVIEW', 'DUPLICATE', 'FRAUD_SUSPECTED'];
   static const _bankFilters = [
     'All Banks',
     'CBE',
@@ -391,23 +383,6 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     'Telebirr',
     'Awash',
   ];
-
-  Color _statusColor(String filter) {
-    switch (filter) {
-      case 'VERIFIED':
-        return AppTheme.success;
-      case 'FAILED':
-        return AppTheme.error;
-      case 'NEEDS_REVIEW':
-        return AppTheme.warning;
-      case 'DUPLICATE':
-        return AppTheme.accentGold;
-      case 'FRAUD_SUSPECTED':
-        return AppTheme.error;
-      default:
-        return AppTheme.textSecondary;
-    }
-  }
 }
 
 class _FilterChip extends StatelessWidget {
