@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:payment_verifier/core/constants/app_constants.dart';
+import 'package:payment_verifier/core/constants/supabase_constants.dart';
 import 'package:payment_verifier/data/datasources/supabase_user_datasource.dart';
 import 'package:payment_verifier/domain/entities/user_profile_entity.dart';
 import 'package:payment_verifier/presentation/providers/auth_provider.dart';
@@ -24,8 +27,8 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> updateRole(String userId, String roleStr) async {
     try {
-      final scopeOwnerId = await _scopeOwnerId;
-      await _ds.updateUserRole(userId, roleStr, ownerId: scopeOwnerId);
+      final ownerId = await _resolveOwnerId();
+      await _ds.updateUserRole(userId, roleStr, ownerId: ownerId);
       return true;
     } catch (_) {
       return false;
@@ -38,23 +41,55 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
     required String password,
   }) async {
     try {
-      final ownerId = Supabase.instance.client.auth.currentUser?.id;
-      if (ownerId == null) return 'Not authenticated';
+      final managerId = Supabase.instance.client.auth.currentUser?.id;
+      if (managerId == null) return 'Not authenticated';
 
-      await Supabase.instance.client.functions.invoke(
-        'create-waiter',
-        body: {
-          'fullName': fullName,
+      final serviceKey = SupabaseConstants.supabaseServiceRoleKey;
+      if (serviceKey.isEmpty || serviceKey == 'your-service-role-key-here') {
+        return 'Service role key not set — add SUPABASE_SERVICE_ROLE_KEY to .env';
+      }
+
+      // Create auth user via admin REST API — no email rate limit, no PKCE
+      final res = await http.post(
+        Uri.parse('${SupabaseConstants.supabaseUrl}/auth/v1/admin/users'),
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceKey,
+          'Authorization': 'Bearer $serviceKey',
+        },
+        body: jsonEncode({
           'email': email,
           'password': password,
-          'ownerId': ownerId,
-        },
-      );
+          'email_confirm': true,
+          'user_metadata': {
+            'full_name': fullName,
+            'role': 'WAITRESS',
+            'owner_id': managerId,
+          },
+        }),
+      ).timeout(const Duration(seconds: 15));
 
-      return null;
-    } on FunctionException catch (e) {
-      debugPrint('[addWaiter Error] $e');
-      return e.details?.toString() ?? 'Failed to create waiter';
+      if (res.statusCode != 200 && res.statusCode != 201) {
+        final b = jsonDecode(res.body) as Map;
+        return b['msg']?.toString()
+            ?? b['message']?.toString()
+            ?? b['error_description']?.toString()
+            ?? 'Create user failed (${res.statusCode})';
+      }
+
+      final body = jsonDecode(res.body) as Map;
+      final newUserId = body['id']?.toString();
+      if (newUserId == null) return 'Could not retrieve new user ID';
+
+      // Insert profile row via SECURITY DEFINER RPC
+      await Supabase.instance.client.rpc('create_waiter_profile', params: {
+        'waiter_id': newUserId,
+        'waiter_email': email,
+        'waiter_name': fullName,
+        'manager_id': managerId,
+      });
+
+      return null; // success
     } catch (e) {
       debugPrint('[addWaiter Error] $e');
       return e.toString().replaceFirst('Exception: ', '');
@@ -63,7 +98,8 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> deleteUser(String userId) async {
     try {
-      await _ds.deleteUser(userId, ownerId: await _scopeOwnerId);
+      final ownerId = await _resolveOwnerId();
+      await _ds.deleteUser(userId, ownerId: ownerId);
       return true;
     } catch (_) {
       return false;
@@ -72,18 +108,26 @@ class UserManagementNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<bool> resetPassword(String userId, String newPassword) async {
     try {
-      await Supabase.instance.client.auth.admin.updateUserById(
-        userId,
-        attributes: AdminUserAttributes(password: newPassword),
-      );
-      return true;
+      final serviceKey = SupabaseConstants.supabaseServiceRoleKey;
+      if (serviceKey.isEmpty || serviceKey == 'your-service-role-key-here') {
+        return false;
+      }
+      final res = await http.put(
+        Uri.parse('${SupabaseConstants.supabaseUrl}/auth/v1/admin/users/$userId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceKey,
+          'Authorization': 'Bearer $serviceKey',
+        },
+        body: jsonEncode({'password': newPassword}),
+      ).timeout(const Duration(seconds: 15));
+      return res.statusCode == 200;
     } catch (_) {
-      await Future.delayed(const Duration(milliseconds: 300));
       return false;
     }
   }
 
-  Future<String?> get _scopeOwnerId async {
+  Future<String?> _resolveOwnerId() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return null;
     try {

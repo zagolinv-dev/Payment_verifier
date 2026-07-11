@@ -16,4 +16,10 @@ class SupabaseConstants {
   /// Your Supabase anon (public) key
   static String get supabaseAnonKey =>
       dotenv.env['SUPABASE_ANON_KEY'] ?? 'your-supabase-anon-key-here';
+
+  /// Service role key — used for admin operations only (create/reset waiter).
+  /// Get it from: Supabase Dashboard → Settings → API → service_role key.
+  /// Add it to your .env file: SUPABASE_SERVICE_ROLE_KEY=eyJ...
+  static String get supabaseServiceRoleKey =>
+      dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '';
 }

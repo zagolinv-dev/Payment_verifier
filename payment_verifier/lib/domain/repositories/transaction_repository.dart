@@ -1,12 +1,14 @@
 import 'package:payment_verifier/domain/entities/transaction_entity.dart';
 
 abstract class TransactionRepository {
-  /// Fetch all transactions — pass [userId] to scope to a single waiter
+  /// Fetch all transactions — pass [userId] to scope to a single waiter,
+  /// pass [ownerId] as empty string '' to skip owner_id scoping entirely
   Future<List<TransactionEntity>> getTransactions({
     String? statusFilter,
     String? bankFilter,
     String? searchQuery,
     String? userId,
+    String? ownerId,
   });
 
   /// Fetch recent N transactions — pass [userId] to scope to a single waiter

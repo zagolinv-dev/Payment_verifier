@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'package:payment_verifier/core/constants/supabase_constants.dart';
 import 'package:payment_verifier/core/theme/app_theme.dart';
 import 'package:payment_verifier/core/utils/formatters.dart';
 import 'package:payment_verifier/core/utils/pdf_export.dart';
@@ -19,9 +22,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 final waiterTransactionsProvider =
     FutureProvider.family<List<TransactionEntity>, String>((ref, waiterId) async {
   final repo = ref.read(transactionRepositoryProvider);
-  final txs = await repo.getTransactions(userId: waiterId);
+  // Pass ownerId as empty string to skip the owner_id scope filter —
+  // transactions only have verified_by, not owner_id.
+  final txs = await repo.getTransactions(userId: waiterId, ownerId: '');
   return txs
-      .where((tx) => tx.status == TransactionStatus.verified)
       .toList()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 });
@@ -188,6 +192,7 @@ class _WaiterDetailScreenState extends ConsumerState<WaiterDetailScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => _ResetPasswordDialog(
+        waiterId: widget.waiterId,
         waiterName: widget.waiterName,
         waiterEmail: widget.waiterEmail,
         isDark: isDark,
@@ -1125,6 +1130,7 @@ class _PeriodTotalRow extends StatelessWidget {
 
 class _ResetPasswordDialog extends StatefulWidget {
   const _ResetPasswordDialog({
+    required this.waiterId,
     required this.waiterName,
     required this.waiterEmail,
     required this.isDark,
@@ -1133,6 +1139,7 @@ class _ResetPasswordDialog extends StatefulWidget {
     required this.textSecondary,
   });
 
+  final String waiterId;
   final String waiterName;
   final String waiterEmail;
   final bool isDark;
@@ -1282,16 +1289,29 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
                     : () async {
                         setState(() => _isResetting = true);
                         try {
-                          final supabase = Supabase.instance.client;
-                          final res = await supabase.functions.invoke(
-                            'reset-user-password',
-                            body: {'email': widget.waiterEmail, 'newPassword': _passwordController.text},
+                          final serviceKey = SupabaseConstants.supabaseServiceRoleKey;
+                          if (serviceKey.isEmpty || serviceKey == 'your-service-role-key-here') {
+                            throw Exception('Service role key not configured in .env');
+                          }
+
+                          // Use waiterId directly — no need to look up by email
+                          final updateUrl = Uri.parse(
+                            '${SupabaseConstants.supabaseUrl}/auth/v1/admin/users/${widget.waiterId}',
                           );
-                          if (res.status == 200) {
+                          final updateRes = await http.put(
+                            updateUrl,
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'apikey': serviceKey,
+                              'Authorization': 'Bearer $serviceKey',
+                            },
+                            body: jsonEncode({'password': _passwordController.text}),
+                          );
+                          if (updateRes.statusCode == 200) {
                             setState(() => _resetSuccessPassword = _passwordController.text);
                           } else {
-                            final msg = res.data is Map ? (res.data as Map)['error'] : null;
-                            throw Exception(msg ?? 'Unknown error');
+                            final b = jsonDecode(updateRes.body) as Map;
+                            throw Exception(b['msg'] ?? b['message'] ?? 'Reset failed (${updateRes.statusCode})');
                           }
                         } catch (e) {
                           if (mounted) {

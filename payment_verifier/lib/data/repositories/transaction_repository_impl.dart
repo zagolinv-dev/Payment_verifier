@@ -13,11 +13,13 @@ class TransactionRepositoryImpl implements TransactionRepository {
     String? bankFilter,
     String? searchQuery,
     String? userId,
+    String? ownerId,
   }) => _datasource.getTransactions(
         statusFilter: statusFilter,
         bankFilter: bankFilter,
         searchQuery: searchQuery,
         userId: userId,
+        ownerId: ownerId,
       );
 
   @override

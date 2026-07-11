@@ -33,13 +33,14 @@ class SupabaseTransactionDatasource {
     String? ownerId,
   }) async {
     // Filters must be applied before transform operations (order)
-    final scopeOwnerId = ownerId ?? await _resolveScopeOwnerId();
+    // ownerId == '' means explicitly skip the owner_id scope (e.g. admin viewing a waiter)
+    final resolvedOwnerId = (ownerId == '') ? null : (ownerId ?? await _resolveScopeOwnerId());
     var transactions = <TransactionModel>[];
     try {
       final base = _client.from(AppConstants.transactionsTable).select();
       var baseFiltered = base;
-      if (scopeOwnerId != null) {
-        baseFiltered = baseFiltered.eq('owner_id', scopeOwnerId);
+      if (resolvedOwnerId != null) {
+        baseFiltered = baseFiltered.eq('owner_id', resolvedOwnerId);
       }
       if (userId != null) {
         baseFiltered = baseFiltered.eq('verified_by', userId);
@@ -52,8 +53,8 @@ class SupabaseTransactionDatasource {
       var fallbackQuery = _client
           .from(AppConstants.transactionsTable)
           .select();
-      if (scopeOwnerId != null) {
-        fallbackQuery = fallbackQuery.eq('owner_id', scopeOwnerId);
+      if (resolvedOwnerId != null) {
+        fallbackQuery = fallbackQuery.eq('owner_id', resolvedOwnerId);
       }
       final response = await fallbackQuery.order('created_at', ascending: false);
       transactions = (response as List)
