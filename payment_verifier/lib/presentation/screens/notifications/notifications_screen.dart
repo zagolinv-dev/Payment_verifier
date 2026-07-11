@@ -225,8 +225,9 @@ class NotificationsScreen extends ConsumerWidget {
     final nameMatch = RegExp(r'(?:Manager|Waiter)\s+([^(]+)\s+\(').firstMatch(notification.message);
     final name = nameMatch?.group(1)?.trim() ?? '';
 
-    String newPassword = '';
+    final passwordController = TextEditingController();
     bool isResetting = false;
+    bool obscurePassword = true;
     String resetSuccessPassword = '';
 
     showDialog(
@@ -234,7 +235,7 @@ class NotificationsScreen extends ConsumerWidget {
       barrierDismissible: false,
       builder: (ctx) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (ctx, setState) {
             return AlertDialog(
               backgroundColor: card,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -244,36 +245,72 @@ class NotificationsScreen extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Password reset successful!', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(resetSuccessPassword, style: GoogleFonts.robotoMono(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
-                              GestureDetector(
-                                onTap: () {
-                                  Clipboard.setData(ClipboardData(text: resetSuccessPassword));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      behavior: SnackBarBehavior.floating,
-                                      backgroundColor: AppTheme.primaryGreen,
-                                      content: Text('Password copied to clipboard!', style: GoogleFonts.inter(color: Colors.white)),
-                                    ),
-                                  );
-                                },
-                                child: const Icon(Icons.copy_rounded, size: 20, color: AppTheme.primaryGreen),
+                        Row(
+                          children: [
+                            Container(
+                              width: 32, height: 32,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryGreen.withOpacity(0.12),
+                                shape: BoxShape.circle,
                               ),
-                            ],
+                              child: const Icon(Icons.check_rounded, color: AppTheme.primaryGreen, size: 18),
+                            ),
+                            const SizedBox(width: 10),
+                            Text('Password reset!', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold, fontSize: 15)),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: resetSuccessPassword));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: AppTheme.primaryGreen,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                content: Text('Password copied!', style: GoogleFonts.inter(color: Colors.white)),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    resetSuccessPassword,
+                                    style: GoogleFonts.robotoMono(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1.5),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryGreen.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.copy_rounded, size: 14, color: AppTheme.primaryGreen),
+                                      const SizedBox(width: 4),
+                                      Text('Copy', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text('Please copy and send it to the waiter.', style: GoogleFonts.inter(color: textSecondary, fontSize: 12)),
+                        Text('Tap to copy and send to ${name.isNotEmpty ? name : 'user'}.', style: GoogleFonts.inter(color: textSecondary, fontSize: 11)),
                       ],
                     )
                   : Column(
@@ -283,14 +320,31 @@ class NotificationsScreen extends ConsumerWidget {
                         Text('Set a new password for ${name.isNotEmpty ? name : email}.', style: GoogleFonts.inter(color: textSecondary, fontSize: 13)),
                         const SizedBox(height: 16),
                         TextField(
-                          onChanged: (v) => newPassword = v,
+                          controller: passwordController,
+                          onChanged: (_) => setState(() {}),
                           style: GoogleFonts.inter(color: textPrimary),
+                          obscureText: obscurePassword,
                           decoration: InputDecoration(
                             hintText: 'Min 8 characters',
                             hintStyle: GoogleFonts.inter(color: textSecondary.withOpacity(0.5)),
                             filled: true,
                             fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: AppTheme.primaryGreen.withOpacity(0.5)),
+                            ),
+                            prefixIcon: Icon(Icons.lock_outline_rounded, color: textSecondary.withOpacity(0.5), size: 20),
+                            suffixIcon: GestureDetector(
+                              onTap: () => setState(() => obscurePassword = !obscurePassword),
+                              child: Icon(
+                                obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                color: textSecondary.withOpacity(0.6),
+                                size: 20,
+                              ),
+                            ),
+                            counterText: '${passwordController.text.length}/8 min',
+                            counterStyle: GoogleFonts.inter(fontSize: 10, color: textSecondary),
                           ),
                         ),
                       ],
@@ -299,7 +353,7 @@ class NotificationsScreen extends ConsumerWidget {
                   ? [
                       TextButton(
                         onPressed: () {
-                          Clipboard.setData(ClipboardData(text: resetSuccessPassword));
+                          passwordController.dispose();
                           Navigator.pop(ctx);
                         },
                         child: Text('Done', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
@@ -307,11 +361,14 @@ class NotificationsScreen extends ConsumerWidget {
                     ]
                   : [
                       TextButton(
-                        onPressed: isResetting ? null : () => Navigator.pop(ctx),
+                        onPressed: isResetting ? null : () {
+                          passwordController.dispose();
+                          Navigator.pop(ctx);
+                        },
                         child: Text('Cancel', style: GoogleFonts.inter(color: textSecondary)),
                       ),
                       TextButton(
-                        onPressed: isResetting || newPassword.length < 8
+                        onPressed: (isResetting || passwordController.text.length < 8)
                             ? null
                             : () async {
                                 setState(() => isResetting = true);
@@ -319,32 +376,37 @@ class NotificationsScreen extends ConsumerWidget {
                                   final supabase = ref.read(supabaseClientProvider);
                                   final res = await supabase.functions.invoke(
                                     'reset-user-password',
-                                    body: {'email': email, 'newPassword': newPassword},
+                                    body: {'email': email, 'newPassword': passwordController.text},
                                   );
-                                  
+
                                   if (res.status == 200) {
                                     setState(() {
-                                      resetSuccessPassword = newPassword;
+                                      resetSuccessPassword = passwordController.text;
+                                      isResetting = false;
                                     });
                                   } else {
-                                    throw Exception(res.data['error'] ?? 'Unknown error');
+                                    throw Exception(res.data?['error'] ?? 'Unknown error');
                                   }
                                 } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
+                                  setState(() => isResetting = false);
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
                                       SnackBar(
                                         behavior: SnackBarBehavior.floating,
                                         backgroundColor: AppTheme.error,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         content: Text('Failed: $e', style: GoogleFonts.inter(color: Colors.white)),
                                       ),
                                     );
                                   }
                                 }
-                                setState(() => isResetting = false);
                               },
                         child: isResetting
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                            : Text('Set Password', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.bold)),
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGreen))
+                            : Text('Set Password', style: GoogleFonts.inter(
+                                color: passwordController.text.length >= 8 ? AppTheme.primaryGreen : textSecondary,
+                                fontWeight: FontWeight.bold,
+                              )),
                       ),
                     ],
             );
