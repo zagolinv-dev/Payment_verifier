@@ -120,8 +120,8 @@ class BankAccountNotifier
 /// The one provider the whole app uses.
 final bankAccountNotifierProvider = StateNotifierProvider<BankAccountNotifier,
     AsyncValue<List<BankAccountEntity>>>((ref) {
-  // Watch the supabase client so if auth changes, this rebuilds
-  ref.watch(supabaseClientProvider);
+  // Watch currentUser so the notifier is rebuilt on login/logout
+  ref.watch(currentUserProvider);
   return BankAccountNotifier(ref.watch(bankAccountRepositoryProvider));
 });
 
