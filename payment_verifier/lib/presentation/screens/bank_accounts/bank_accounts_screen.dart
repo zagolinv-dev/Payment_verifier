@@ -422,7 +422,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
       );
       mappedBank = match.shortName;
     }
-    final isTelebirr = mappedBank == 'Telebirr';
+    final isTelebirr = mappedBank == 'Telebirr' || mappedBank == 'CBE Birr';
     _holderController = TextEditingController(text: initial?.holderName ?? '');
     _accountController = TextEditingController(
       text: isTelebirr ? '' : (initial?.accountNumber ?? ''),
@@ -448,7 +448,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate() || _selectedBank == null) return;
     setState(() => _isLoading = true);
-    final isTelebirr = _selectedBank == 'Telebirr';
+    final isTelebirr = _selectedBank == 'Telebirr' || _selectedBank == 'CBE Birr';
     final payload = {
       'holderName': _holderController.text.trim(),
       'bankName': _selectedBank!,
@@ -558,7 +558,7 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
                         onChanged: (v) {
                           setState(() {
                             _selectedBank = v;
-                            if (v == 'Telebirr') {
+                            if (v == 'Telebirr' || v == 'CBE Birr') {
                               _accountController.clear();
                             }
                           });
@@ -570,20 +570,20 @@ class _AddBankAccountModalState extends State<_AddBankAccountModal> {
               ),
               const SizedBox(height: 16),
               AppTextField(
-                label: _selectedBank == 'Telebirr' ? 'Account Number (Managed by Phone)' : 'Account Number',
-                hint: _selectedBank == 'Telebirr' ? 'N/A (Managed by Phone Number)' : '1234567890',
+                label: (_selectedBank == 'Telebirr' || _selectedBank == 'CBE Birr') ? 'Account Number (Managed by Phone)' : 'Account Number',
+                hint: (_selectedBank == 'Telebirr' || _selectedBank == 'CBE Birr') ? 'N/A (Managed by Phone Number)' : '1234567890',
                 controller: _accountController,
                 keyboardType: TextInputType.number,
-                enabled: _selectedBank != 'Telebirr',
-                validator: (v) => _selectedBank == 'Telebirr' ? null : (v?.isEmpty == true ? 'Required' : null),
+                enabled: _selectedBank != 'Telebirr' && _selectedBank != 'CBE Birr',
+                validator: (v) => (_selectedBank == 'Telebirr' || _selectedBank == 'CBE Birr') ? null : (v?.isEmpty == true ? 'Required' : null),
               ),
               const SizedBox(height: 16),
               AppTextField(
-                label: _selectedBank == 'Telebirr' ? 'Phone Number (Required)' : 'Phone Number (optional)',
+                label: (_selectedBank == 'Telebirr' || _selectedBank == 'CBE Birr') ? 'Phone Number (Required)' : 'Phone Number (optional)',
                 hint: '+251 9XX XXX XXX',
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
-                validator: (v) => _selectedBank == 'Telebirr' && (v == null || v.trim().isEmpty) ? 'Required' : null,
+                validator: (v) => (_selectedBank == 'Telebirr' || _selectedBank == 'CBE Birr') && (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: 16),
               AppTextField(

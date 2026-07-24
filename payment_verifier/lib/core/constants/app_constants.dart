@@ -36,7 +36,7 @@ enum BankName {
   final String displayName;
   final String shortName;
 
-  static List<BankName> get addAccountOptions => [cbe, boa, telebirr, awash];
+  static List<BankName> get addAccountOptions => [cbe, boa, cbeBirr, telebirr, awash];
 
   static BankName fromString(String value) {
     return BankName.values.firstWhere(

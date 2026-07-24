@@ -617,31 +617,43 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
                 ],
 
                 const SizedBox(height: 20),
-                AppTextField(
-                  label: 'Customer Name',
-                  hint: 'Full name of payer',
-                  controller: _buyerController,
-                  prefixIcon: Icon(Icons.person_outline_rounded,
-                      color: isDark
-                          ? AppTheme.textTertiary
-                          : AppTheme.lightTextTertiary,
-                      size: 20),
-                  onChanged: notifier.setBuyerName,
-                ),
-                const SizedBox(height: 20),
 
-                AppTextField(
-                  label: 'Receiver Account',
-                  hint: 'Account paid to',
-                  controller: _receiverAcctController,
-                  prefixIcon: Icon(Icons.credit_card_rounded,
-                      color: isDark
-                          ? AppTheme.textTertiary
-                          : AppTheme.lightTextTertiary,
-                      size: 20),
-                  onChanged: notifier.setReceiverAccount,
-                ),
-                const SizedBox(height: 20),
+                // Hide customer name for Telebirr only — CBE Birr has sender name in receipt
+                if (state.ocrDetectedBank != 'telebirr' &&
+                    state.selectedBank != 'Telebirr') ...[
+                  AppTextField(
+                    label: 'Customer Name',
+                    hint: 'Full name of payer',
+                    controller: _buyerController,
+                    prefixIcon: Icon(Icons.person_outline_rounded,
+                        color: isDark
+                            ? AppTheme.textTertiary
+                            : AppTheme.lightTextTertiary,
+                        size: 20),
+                    onChanged: notifier.setBuyerName,
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
+                // Hide receiver account when:
+                // - Telebirr/CBE Birr (no account shown on these receipts)
+                // - OR OCR completed and found no account on the receipt
+                if (state.ocrDetectedBank != 'telebirr' && state.ocrDetectedBank != 'cbe_birr' &&
+                    state.selectedBank != 'Telebirr' && state.selectedBank != 'CBE Birr' &&
+                    !(state.ocrCompleted && state.receiverAccount.isEmpty)) ...[
+                  AppTextField(
+                    label: 'Receiver Account',
+                    hint: 'Account paid to',
+                    controller: _receiverAcctController,
+                    prefixIcon: Icon(Icons.credit_card_rounded,
+                        color: isDark
+                            ? AppTheme.textTertiary
+                            : AppTheme.lightTextTertiary,
+                        size: 20),
+                    onChanged: notifier.setReceiverAccount,
+                  ),
+                  const SizedBox(height: 20),
+                ],
 
                 AppTextField(
                   label: 'Reference Code',

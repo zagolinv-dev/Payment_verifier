@@ -74,7 +74,7 @@ class OcrService {
     // For BOA and CBE, prefer text-based name extraction over geometry
     // because geometry often mis-pairs columns in two-column receipt layouts.
     final String? customerName;
-    if (bank == 'boa' || bank == 'cbe') {
+    if (bank == 'boa' || bank == 'cbe' || bank == 'cbe_birr') {
       customerName = extractCustomerName(text, geom: geom, bank: bank);
     } else {
       customerName = _firstNonEmpty([
@@ -286,6 +286,12 @@ class OcrService {
             caseSensitive: false)
         .firstMatch(text);
     if (debited != null) return _money(debited.group(1));
+
+    // CBE Birr format: "ETB 800 debited from"
+    final cbiDebited = RegExp(r'ETB\s*([\d,]+(?:\.\d{1,2})?)\s+debited\s+from',
+            caseSensitive: false)
+        .firstMatch(text);
+    if (cbiDebited != null) return _money(cbiDebited.group(1));
 
     // CBE SMS format: "Completed ETB60.61 transfer" (no space between ETB and amount)
     final completedEtb = RegExp(r'[Cc]ompleted\s+ETB\s*([\d,]+(?:\.\d{1,2})?)\s+transfer',
@@ -511,16 +517,31 @@ class OcrService {
 
   // --- date -------------------------------------------------------------------
   String? _date(String text, Map<String, String> geom) {
+    // Normalize newlines to spaces so multi-line OCR output doesn't break date parsing
+    final flat = text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ');
     final search = geom['Transaction Date'] ??
         geom['Transaction Time'] ??
         _afterLabel(text, ['Transaction Date', 'Transaction Time', 'Date']) ??
-        text;
+        flat;
+    // Month-name first: "Jul 23, 2026 11:09 PM"
     final mn = RegExp(
-            r'\b([A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4}(?:[ ,]+\d{1,2}:\d{2}(?::\d{2})?\s*[APap]?\.?[Mm]?\.?)?)')
+            r'\b([A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4}(?:[ ,]+\d{1,2}:\d{2}(?::\d{2})?\s*[APap][Mm])?)')
         .firstMatch(search);
     if (mn != null) return mn.group(1)?.trim();
+    // Day first: "23 Jul 2026" (CBE Birr)
+    final df = RegExp(
+            r'\b(\d{1,2}\s+[A-Z][a-z]{2,8}\s+\d{4}(?:[ ,]+\d{1,2}:\d{2}(?::\d{2})?\s*[APap][Mm])?)')
+        .firstMatch(search);
+    if (df != null) {
+      // Normalise to "Jul 23, 2026" so parseReceiptDate handles it
+      final parts = df.group(1)!.trim().split(RegExp(r'\s+'));
+      if (parts.length >= 3) {
+        return '${parts[1]} ${parts[0]}, ${parts.sublist(2).join(' ')}';
+      }
+    }
+    // Numeric: "2026/06/28 17:11"
     final num = RegExp(
-            r'\b(\d{2,4}[/\-]\d{1,2}[/\-]\d{1,4}(?:[ ,]+\d{1,2}:\d{2}(?::\d{2})?\s*[APap]?[Mm]?)?)')
+            r'\b(\d{2,4}[/\-]\d{1,2}[/\-]\d{1,4}(?:[ T]+\d{1,2}:\d{2}(?::\d{2})?)?)')
         .firstMatch(search);
     return num?.group(1)?.trim();
   }
@@ -548,7 +569,7 @@ class OcrService {
         (t.contains('transfer money') || t.contains('payment qr code') ||
          t.contains('payment method') || t.contains('transaction type'))) return 'telebirr';
     if (t.contains('m-pesa') || t.contains('mpesa')) return 'mpesa';
-    if (t.contains('cbe birr')) return 'cbe_birr';
+    if (t.contains('cbe birr') || t.contains('cbebirr') || t.contains('cbe-birr')) return 'cbe_birr';
     if (t.contains('awashbank') || t.contains('awash bank') || t.contains('awashbirr')) return 'awash';
     if (t.contains('nib international') || t.contains('nib bank') || t.contains('nib ')) {
       return 'nib';
@@ -836,8 +857,8 @@ String? extractCustomerName(String text,
     return null;
   }
 
-  // ── CBE / Negid ─────────────────────────────────────────────────────────
-  if (bank == 'cbe') {
+  // ── CBE / Negid / CBE Birr ──────────────────────────────────────────────
+  if (bank == 'cbe' || bank == 'cbe_birr') {
     // Normalize newlines to spaces for single-block notification text
     final flat = text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ');
 

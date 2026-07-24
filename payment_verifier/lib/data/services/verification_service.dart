@@ -128,27 +128,25 @@ class VerificationService {
     if (isTelebirr) {
       final receiverName = ocr.receiverName;
       final expectedReceiver = config.expectedReceiverName;
-      if (receiverName != null) {
-        if (expectedReceiver != null) {
-          final match = _namesMatch(receiverName, expectedReceiver);
-          if (match) {
-            steps.add(VStep('Receiver name match', '$receiverName ✓', StepState.pass));
-          } else {
-            steps.add(VStep('Receiver name match', 'Extracted: $receiverName, Expected: $expectedReceiver', StepState.fail));
-            failures.add('Receiver name mismatch');
-          }
+      if (receiverName == null || receiverName.isEmpty) {
+        // Telebirr table receipt may not expose payer/receiver name — skip
+        steps.add(const VStep('Receiver name', 'N/A (not on receipt)', StepState.pass));
+      } else if (expectedReceiver != null) {
+        final match = _namesMatch(receiverName, expectedReceiver);
+        if (match) {
+          steps.add(VStep('Receiver name match', '$receiverName ✓', StepState.pass));
         } else {
-          steps.add(VStep('Receiver name', receiverName, StepState.pass));
+          steps.add(VStep('Receiver name match', 'Extracted: $receiverName, Expected: $expectedReceiver', StepState.fail));
+          failures.add('Receiver name mismatch');
         }
       } else {
-        steps.add(const VStep('Receiver name', 'Not found', StepState.fail));
-        failures.add('Receiver name not found');
+        steps.add(VStep('Receiver name', receiverName, StepState.pass));
       }
     } else {
       final customerName = ocr.customerName;
       final expectedCustomer = config.expectedCustomerName;
-      if (customerName != null) {
-        if (expectedCustomer != null) {
+      if (customerName != null && customerName.isNotEmpty) {
+        if (expectedCustomer != null && expectedCustomer.isNotEmpty) {
           final match = _namesMatch(customerName, expectedCustomer);
           if (match) {
             steps.add(VStep('Customer name match', '$customerName ✓', StepState.pass));
@@ -159,9 +157,13 @@ class VerificationService {
         } else {
           steps.add(VStep('Customer name', customerName, StepState.pass));
         }
-      } else {
+      } else if (expectedCustomer != null && expectedCustomer.isNotEmpty) {
+        // Expected but not found
         steps.add(const VStep('Customer name', 'Not found', StepState.fail));
         failures.add('Customer name not found');
+      } else {
+        // Neither extracted nor expected — skip rather than fail
+        steps.add(const VStep('Customer name', 'Not provided', StepState.pass));
       }
     }
 
@@ -202,24 +204,24 @@ class VerificationService {
 
     // 6) Extract receiver account
     final receiverAcct = ocr.receiverAccount;
-    if (receiverAcct != null) {
+    if (receiverAcct != null && receiverAcct.isNotEmpty) {
       steps.add(VStep('Extract receiver account', receiverAcct, StepState.pass));
     } else if (isTelebirr) {
-      steps.add(const VStep('Extract receiver account', 'Not found', StepState.fail));
-      failures.add('Receiver account not found');
+      // Telebirr table receipts don't show an account number — skip
+      steps.add(const VStep('Extract receiver account', 'N/A (Telebirr)', StepState.pass));
     } else {
-      steps.add(VStep('Extract receiver account', 'Not found', StepState.fail));
-      failures.add('Receiver account not found');
+      // For other banks (e.g. CBE) — skip rather than fail if no account visible on receipt
+      steps.add(const VStep('Extract receiver account', 'N/A (not on receipt)', StepState.pass));
     }
 
     // 7) Receiver account match (compare with business accounts)
-    if (isTelebirr) {
+    if (receiverAcct == null || receiverAcct.isEmpty) {
+      // No account extracted from receipt — skip match entirely
+      steps.add(const VStep('Account match', 'Skipped (no account on receipt)', StepState.pass));
+    } else if (isTelebirr) {
       if (config.businessAccounts.isEmpty) {
         steps.add(const VStep('Account match', 'No business accounts saved', StepState.fail));
         failures.add('Business accounts not set');
-      } else if (receiverAcct == null) {
-        steps.add(const VStep('Account match', 'No receiver phone/account', StepState.fail));
-        failures.add('No receiver account');
       } else if (_suffixMatch(receiverAcct, config.businessAccounts) ||
           _phoneMatch(receiverAcct, config.businessAccounts)) {
         steps.add(VStep('Account match', '$receiverAcct ✓', StepState.pass));
@@ -230,9 +232,6 @@ class VerificationService {
     } else if (config.businessAccounts.isEmpty) {
       steps.add(const VStep('Account match', 'No business accounts saved', StepState.fail));
       failures.add('Business accounts not set');
-    } else if (receiverAcct == null) {
-      steps.add(const VStep('Account match', 'No receiver account', StepState.fail));
-      failures.add('No receiver account');
     } else if (_suffixMatch(receiverAcct, config.businessAccounts)) {
       steps.add(VStep('Account match', '$receiverAcct ✓', StepState.pass));
     } else {
