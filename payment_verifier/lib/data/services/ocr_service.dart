@@ -96,12 +96,12 @@ class OcrService {
       status: _status(text),
       customerName: customerName,
       senderAccount: _firstNonEmpty([
-        geom['Sender Account'],
-        geom['Source Account'],
-        geom['Payer Account'],
-        geom['Debit Account'],
-        geom['From Account'],
-        _cbeSenderAccount(text),
+        _validAccount(geom['Sender Account']),
+        _validAccount(geom['Source Account']),
+        _validAccount(geom['Payer Account']),
+        _validAccount(geom['Debit Account']),
+        _validAccount(geom['From Account']),
+        _cbeSenderAccount(text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ')),
         _inlineAccount(text, _senderLabels),
       ]),
       receiverName: _firstNonEmpty([
@@ -114,20 +114,20 @@ class OcrService {
         _cleanName(geom['Credited Party Name']),
         _cleanName(geom['Credited To Name']),
         _boaReceiverName(text),
-        _cbeReceiverName(text),
+        _cbeReceiverName(text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ')),
         _telebirrReceiverName(text),
         _inlineReceiverName(text),
       ]),
       receiverAccount: _firstNonEmpty([
-        geom['Receiver Account'],
-        geom['Beneficiary Account'],
-        geom['Credit Account'],
-        geom['To Account'],
+        _validAccount(geom['Receiver Account']),
+        _validAccount(geom['Beneficiary Account']),
+        _validAccount(geom['Credit Account']),
+        _validAccount(geom['To Account']),
         geom['Transfer To Account'],
         geom['Credited Party Account'],
         geom['Credited To Account'],
         _telebirrReceiverAccount(text),
-        _cbeReceiverAccount(text),
+        _cbeReceiverAccount(text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ')),
         _inlineAccount(text, _receiverLabels),
       ]),
       date: _date(text, geom),
@@ -256,6 +256,20 @@ class OcrService {
     return fields;
   }
 
+  /// Returns the value only if it looks like an account number (has digits).
+  /// Rejects bank names, labels, and other non-account strings.
+  String? _validAccount(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final v = raw.trim();
+    // Must contain at least one digit to be a valid account
+    if (!RegExp(r'\d').hasMatch(v)) return null;
+    // Reject if it looks like a bank name or label
+    final lower = v.toLowerCase();
+    if (RegExp(r'\b(?:awash|bank|telebirr|cbe|boa|abyssinia|zemen|dashen|nib|mpesa)\b')
+        .hasMatch(lower)) return null;
+    return v;
+  }
+
   // --- amount (principal only) -----------------------------------------------
   String? _amount(String text, Map<String, String> geom) {
     // Telebirr / wallet labelled amounts
@@ -364,6 +378,13 @@ class OcrService {
     final m = RegExp(r'\bfor\s+([A-Za-z][A-Za-z .]{2,40}?)\s+ETB-?\d', caseSensitive: false)
         .firstMatch(text);
     if (m != null) return _cleanName(m.group(1));
+
+    // CBE Birr format: "for Efrem Yemaneh Teklu on DATE" (no ETB-NNNN suffix)
+    final cbeBirr = RegExp(
+      r'\bfor\s+([A-Za-z][A-Za-z .]{2,50}?)\s+on\s+\d{1,2}\s+[A-Za-z]',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (cbeBirr != null) return _cleanName(cbeBirr.group(1));
 
     // SMS format: "transfer From [Sender] to [Receiver Name]-[digits]"
     // e.g. "Completed ETB60.61 transfer From Eden Belayineh Ayalew to Getu Tesfaye Abayneh-3735"

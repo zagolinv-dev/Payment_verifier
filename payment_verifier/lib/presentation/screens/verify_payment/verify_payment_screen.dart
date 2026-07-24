@@ -31,6 +31,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
   final _buyerController = TextEditingController();
   final _amountController = TextEditingController();
   final _receiverAcctController = TextEditingController();
+  final _receiverNameController = TextEditingController();
   final _referenceController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _ocrService = OcrService();
@@ -45,6 +46,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     _buyerController.dispose();
     _amountController.dispose();
     _receiverAcctController.dispose();
+    _receiverNameController.dispose();
     _referenceController.dispose();
     super.dispose();
   }
@@ -106,6 +108,9 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
       if (result.receiverName != null && result.receiverName!.isNotEmpty) {
         notifier.setOcrExtractedReceiverName(result.receiverName!);
         notifier.setReceiverName(result.receiverName!);
+        if (_receiverNameController.text.isEmpty) {
+          _receiverNameController.text = result.receiverName!;
+        }
       }
 
       if (result.date != null && result.date!.isNotEmpty) {
@@ -255,7 +260,8 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
       paymentMethod: st.ocrDetectedBank,
       customerName: st.ocrExtractedCustomerName.isNotEmpty ? st.ocrExtractedCustomerName : null,
       receiverAccount: st.receiverAccount.isNotEmpty ? st.receiverAccount : null,
-      receiverName: st.ocrExtractedReceiverName.isNotEmpty ? st.ocrExtractedReceiverName : null,
+      receiverName: (st.ocrExtractedReceiverName.isNotEmpty ? st.ocrExtractedReceiverName : null)
+          ?? (st.receiverName.isNotEmpty ? st.receiverName : null),
       date: st.transactionDate.isNotEmpty ? st.transactionDate : null,
     );
 
@@ -465,6 +471,7 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
     _buyerController.clear();
     _amountController.clear();
     _receiverAcctController.clear();
+    _receiverNameController.clear();
     _referenceController.clear();
     setState(() => _selectedImage = null);
   }
@@ -618,9 +625,15 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
 
                 const SizedBox(height: 20),
 
-                // Hide customer name for Telebirr only — CBE Birr has sender name in receipt
+                // Hide customer name for Telebirr, CBE, CBE Birr, and Awash
                 if (state.ocrDetectedBank != 'telebirr' &&
-                    state.selectedBank != 'Telebirr') ...[
+                    state.ocrDetectedBank != 'cbe' &&
+                    state.ocrDetectedBank != 'cbe_birr' &&
+                    state.ocrDetectedBank != 'awash' &&
+                    state.selectedBank != 'Telebirr' &&
+                    state.selectedBank != 'Commercial Bank of Ethiopia' &&
+                    state.selectedBank != 'CBE Birr' &&
+                    state.selectedBank != 'Awash Bank') ...[
                   AppTextField(
                     label: 'Customer Name',
                     hint: 'Full name of payer',
@@ -635,11 +648,31 @@ class _VerifyPaymentScreenState extends ConsumerState<VerifyPaymentScreen> {
                   const SizedBox(height: 20),
                 ],
 
-                // Hide receiver account when:
-                // - Telebirr/CBE Birr (no account shown on these receipts)
-                // - OR OCR completed and found no account on the receipt
+                // Receiver Name — shown for CBE and CBE Birr (has "for RECEIVER" in receipt)
+                if (state.ocrDetectedBank == 'cbe_birr' ||
+                    state.ocrDetectedBank == 'cbe' ||
+                    state.selectedBank == 'CBE Birr' ||
+                    state.selectedBank == 'Commercial Bank of Ethiopia') ...[
+                  AppTextField(
+                    label: 'Receiver Name',
+                    hint: 'Name of payment recipient',
+                    controller: _receiverNameController,
+                    prefixIcon: Icon(Icons.person_pin_outlined,
+                        color: isDark
+                            ? AppTheme.textTertiary
+                            : AppTheme.lightTextTertiary,
+                        size: 20),
+                    onChanged: notifier.setReceiverName,
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
+                // Hide receiver account for Telebirr, CBE, CBE Birr, and Awash
                 if (state.ocrDetectedBank != 'telebirr' && state.ocrDetectedBank != 'cbe_birr' &&
+                    state.ocrDetectedBank != 'cbe' && state.ocrDetectedBank != 'awash' &&
                     state.selectedBank != 'Telebirr' && state.selectedBank != 'CBE Birr' &&
+                    state.selectedBank != 'Commercial Bank of Ethiopia' &&
+                    state.selectedBank != 'Awash Bank' &&
                     !(state.ocrCompleted && state.receiverAccount.isEmpty)) ...[
                   AppTextField(
                     label: 'Receiver Account',

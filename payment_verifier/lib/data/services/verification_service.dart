@@ -125,11 +125,17 @@ class VerificationService {
 
     // 2) Customer name / Receiver name match
     final isTelebirr = _isTelebirr(resolvedBank);
+    final isCbeBirr = resolvedBank != null &&
+        (resolvedBank.toLowerCase().contains('birr') ||
+         resolvedBank.toLowerCase() == 'cbe_birr');
+    final isCbeFamily = isCbeBirr ||
+        (resolvedBank != null && _canonicalBank(resolvedBank) == 'cbe') ||
+        (resolvedBank != null && _canonicalBank(resolvedBank) == 'awash');
+
     if (isTelebirr) {
       final receiverName = ocr.receiverName;
       final expectedReceiver = config.expectedReceiverName;
       if (receiverName == null || receiverName.isEmpty) {
-        // Telebirr table receipt may not expose payer/receiver name — skip
         steps.add(const VStep('Receiver name', 'N/A (not on receipt)', StepState.pass));
       } else if (expectedReceiver != null) {
         final match = _namesMatch(receiverName, expectedReceiver);
@@ -142,6 +148,13 @@ class VerificationService {
       } else {
         steps.add(VStep('Receiver name', receiverName, StepState.pass));
       }
+    } else if (isCbeFamily) {
+      // CBE / CBE Birr — show receiver name only (customer name is informational, not a check)
+      final receiverName = ocr.receiverName;
+      if (receiverName != null && receiverName.isNotEmpty) {
+        steps.add(VStep('Receiver name', '$receiverName ✓', StepState.pass));
+      }
+      // Customer name intentionally omitted from result for CBE family
     } else {
       final customerName = ocr.customerName;
       final expectedCustomer = config.expectedCustomerName;
@@ -158,11 +171,9 @@ class VerificationService {
           steps.add(VStep('Customer name', customerName, StepState.pass));
         }
       } else if (expectedCustomer != null && expectedCustomer.isNotEmpty) {
-        // Expected but not found
         steps.add(const VStep('Customer name', 'Not found', StepState.fail));
         failures.add('Customer name not found');
       } else {
-        // Neither extracted nor expected — skip rather than fail
         steps.add(const VStep('Customer name', 'Not provided', StepState.pass));
       }
     }
@@ -202,41 +213,42 @@ class VerificationService {
       failures.add('Transaction ID not found');
     }
 
-    // 6) Extract receiver account
+    // 6) Extract receiver account — omitted entirely for CBE family
     final receiverAcct = ocr.receiverAccount;
-    if (receiverAcct != null && receiverAcct.isNotEmpty) {
-      steps.add(VStep('Extract receiver account', receiverAcct, StepState.pass));
-    } else if (isTelebirr) {
-      // Telebirr table receipts don't show an account number — skip
-      steps.add(const VStep('Extract receiver account', 'N/A (mobile money)', StepState.pass));
-    } else {
-      // For other banks (e.g. CBE) — skip rather than fail if no account visible on receipt
-      steps.add(const VStep('Extract receiver account', 'N/A (not on receipt)', StepState.pass));
+    if (!isCbeFamily) {
+      if (receiverAcct != null && receiverAcct.isNotEmpty) {
+        steps.add(VStep('Extract receiver account', receiverAcct, StepState.pass));
+      } else if (isTelebirr) {
+        steps.add(const VStep('Extract receiver account', 'N/A (mobile money)', StepState.pass));
+      } else {
+        steps.add(const VStep('Extract receiver account', 'N/A (not on receipt)', StepState.pass));
+      }
     }
 
-    // 7) Receiver account match (compare with business accounts)
-    if (receiverAcct == null || receiverAcct.isEmpty) {
-      // No account extracted from receipt — skip match entirely
-      steps.add(const VStep('Account match', 'Skipped (no account on receipt)', StepState.pass));
-    } else if (isTelebirr) {
-      if (config.businessAccounts.isEmpty) {
+    // 7) Receiver account match — omitted entirely for CBE family
+    if (!isCbeFamily) {
+      if (receiverAcct == null || receiverAcct.isEmpty) {
+        steps.add(const VStep('Account match', 'Skipped (no account on receipt)', StepState.pass));
+      } else if (isTelebirr) {
+        if (config.businessAccounts.isEmpty) {
+          steps.add(const VStep('Account match', 'No business accounts saved', StepState.fail));
+          failures.add('Business accounts not set');
+        } else if (_suffixMatch(receiverAcct, config.businessAccounts) ||
+            _phoneMatch(receiverAcct, config.businessAccounts)) {
+          steps.add(VStep('Account match', '$receiverAcct ✓', StepState.pass));
+        } else {
+          steps.add(VStep('Account match', '$receiverAcct ≠ your accounts', StepState.fail));
+          failures.add('Account not yours');
+        }
+      } else if (config.businessAccounts.isEmpty) {
         steps.add(const VStep('Account match', 'No business accounts saved', StepState.fail));
         failures.add('Business accounts not set');
-      } else if (_suffixMatch(receiverAcct, config.businessAccounts) ||
-          _phoneMatch(receiverAcct, config.businessAccounts)) {
+      } else if (_suffixMatch(receiverAcct, config.businessAccounts)) {
         steps.add(VStep('Account match', '$receiverAcct ✓', StepState.pass));
       } else {
         steps.add(VStep('Account match', '$receiverAcct ≠ your accounts', StepState.fail));
         failures.add('Account not yours');
       }
-    } else if (config.businessAccounts.isEmpty) {
-      steps.add(const VStep('Account match', 'No business accounts saved', StepState.fail));
-      failures.add('Business accounts not set');
-    } else if (_suffixMatch(receiverAcct, config.businessAccounts)) {
-      steps.add(VStep('Account match', '$receiverAcct ✓', StepState.pass));
-    } else {
-      steps.add(VStep('Account match', '$receiverAcct ≠ your accounts', StepState.fail));
-      failures.add('Account not yours');
     }
 
     // 8) Date & freshness check — receipt must be within 15 minutes
