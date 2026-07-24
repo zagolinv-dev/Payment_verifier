@@ -1,0 +1,5 @@
+# Secrets / credentials — NEVER commit
+*.jks
+*.keystore
+key.properties
+.env

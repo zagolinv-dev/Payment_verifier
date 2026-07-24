@@ -85,6 +85,15 @@ class SupabaseAuthDatasource {
     await _client.auth.resetPasswordForEmail(email);
   }
 
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('Not authenticated');
+
+    await _client.auth.updateUser(
+      UserAttributes(password: newPassword),
+    );
+  }
+
   Future<void> signOut() async {
     await _client.auth.signOut();
   }

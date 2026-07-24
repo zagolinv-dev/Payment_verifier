@@ -405,7 +405,7 @@ class SupabaseTransactionDatasource {
     try {
       await _client.rpc('clear_all_data');
     } catch (e) {
-      print('[clearAll] RPC failed – will try per-ID deletes: $e');
+      debugPrint('[clearAll] RPC failed – will try per-ID deletes: $e');
       var rowsQuery = _client.from(AppConstants.transactionsTable).select('id');
       if (scopeOwnerId != null) rowsQuery = rowsQuery.eq('owner_id', scopeOwnerId);
       final rows = await rowsQuery;
@@ -420,7 +420,7 @@ class SupabaseTransactionDatasource {
           deleted++;
         } catch (e) {
           lastError = e;
-          print('[clearAll] skip tx $id: $e');
+          debugPrint('[clearAll] skip tx $id: $e');
         }
       }
       if (deleted == 0 && lastError != null) {
@@ -452,7 +452,7 @@ class SupabaseTransactionDatasource {
         } catch (_) {}
       }
     } catch (e) {
-      print('[clearAll] notification cleanup: $e');
+      debugPrint('[clearAll] notification cleanup: $e');
     }
   }
 }

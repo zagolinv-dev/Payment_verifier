@@ -1,4 +1,5 @@
 import 'dart:ui' show Rect;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 /// Structured data extracted from an Ethiopian payment-receipt image.
@@ -59,12 +60,9 @@ class OcrService {
     final recognised = await _recognizer.processImage(inputImage);
     final geom = _extractByGeometry(recognised);
     final result = parseText(recognised.text, geom: geom);
-    // ignore: avoid_print
-    print('[OCR] $result');
-    // ignore: avoid_print
-    print('[OCR RAW]\n${recognised.text}');
-    // ignore: avoid_print
-    print('[OCR GEOM] $geom');
+    debugPrint('[OCR] $result');
+    debugPrint('[OCR RAW]\n${recognised.text}');
+    debugPrint('[OCR GEOM] $geom');
     return result;
   }
 

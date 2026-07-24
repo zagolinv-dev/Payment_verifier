@@ -137,6 +137,12 @@ class AboutScreen extends ConsumerWidget {
                   color: AppTheme.accentGold,
                 ),
                 _PaymentMethodRow(
+                  icon: Icons.phone_android_rounded,
+                  label: 'CBE Birr',
+                  sublabel: 'Mobile Money',
+                  color: AppTheme.primaryGreen,
+                ),
+                _PaymentMethodRow(
                   icon: Icons.account_balance_rounded,
                   label: 'Awash Bank',
                   sublabel: 'Awash',

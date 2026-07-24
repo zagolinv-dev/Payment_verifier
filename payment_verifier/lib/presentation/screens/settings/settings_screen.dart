@@ -182,7 +182,7 @@ class SettingsScreen extends ConsumerWidget {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  "T's Verify © 2024",
+                  "T's Verify © 2026",
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: isDark ? AppTheme.textTertiary : AppTheme.lightTextTertiary,
@@ -255,13 +255,15 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
   final confirmCtrl = TextEditingController();
   final formKey = GlobalKey<FormState>();
 
+  bool obscureCurrent = true;
+  bool obscureNew = true;
+  bool obscureConfirm = true;
+
   showDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDialogState) {
-        bool obscureCurrent = true;
-        bool obscureNew = true;
-        bool obscureConfirm = true;
+        bool isLoading = false;
 
         return AlertDialog(
           backgroundColor: card,
@@ -327,27 +329,52 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
                     return null;
                   },
                 ),
+                if (isLoading) ...[
+                  const SizedBox(height: 16),
+                  const Center(child: CircularProgressIndicator(strokeWidth: 3)),
+                ],
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: isLoading ? null : () => Navigator.pop(ctx),
               child: Text('Cancel', style: GoogleFonts.inter(color: textTertiary)),
             ),
             ElevatedButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) return;
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Password updated successfully', style: GoogleFonts.inter(color: Colors.white)),
-                    backgroundColor: AppTheme.primaryGreen,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                );
-              },
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() => isLoading = true);
+                      try {
+                        await ref.read(authProvider.notifier).changePassword(
+                              currentCtrl.text,
+                              newCtrl.text,
+                            );
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Password updated successfully', style: GoogleFonts.inter(color: Colors.white)),
+                            backgroundColor: AppTheme.primaryGreen,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        );
+                      } catch (e) {
+                        setDialogState(() => isLoading = false);
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString().replaceFirst('Exception: ', ''), style: GoogleFonts.inter(color: Colors.white)),
+                            backgroundColor: AppTheme.error,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        );
+                      }
+                    },
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               child: Text('Update', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
             ),

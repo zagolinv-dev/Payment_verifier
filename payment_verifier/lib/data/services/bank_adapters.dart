@@ -22,6 +22,11 @@ class BankRegistry {
       ]),
     ),
     BankAdapter(
+      id: 'cbe_birr',
+      name: 'CBE Birr',
+      detect: (t) => _has(t, ['cbe birr', 'cbebirr', 'cbe-birr']),
+    ),
+    BankAdapter(
       id: 'awash',
       name: 'Awash Bank',
       detect: (t) => _has(t, ['awashbank', 'awash bank', 'awashbirr']),

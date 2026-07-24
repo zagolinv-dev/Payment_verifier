@@ -890,7 +890,41 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         ),
         const SizedBox(height: 24),
         ElevatedButton.icon(
-          onPressed: () {},
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: const Color(0xFF1A2A1F),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 56, height: 56,
+                      decoration: BoxDecoration(color: AppTheme.primaryGreen.withOpacity(0.12), shape: BoxShape.circle),
+                      child: const Icon(Icons.contact_support_rounded, color: AppTheme.primaryGreen, size: 28),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Contact Your Manager', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white), textAlign: TextAlign.center),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your manager needs to create your waiter account first. Please ask them for your login email and password.',
+                      style: GoogleFonts.inter(fontSize: 13, color: Colors.white.withOpacity(0.6), height: 1.4),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+                actions: [
+                  Center(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text('Got it', style: GoogleFonts.inter(color: AppTheme.primaryGreen, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white.withOpacity(0.05),
             foregroundColor: Colors.white,

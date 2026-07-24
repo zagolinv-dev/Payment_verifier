@@ -59,9 +59,30 @@ async function verifyTelebirr({ reference }) {
   return { found: true, amount, receiverAccount: receiver };
 }
 
-// ---- Awash: no public page. Reconcile via statement/SMS or aggregator. -------
-async function verifyAwash() {
-  return { found: false, error: 'awash has no public lookup — review/reconcile' };
+// ---- Awash: attempts QR-based verification (similar to BOA). -----------------
+// Falls back to manual review if no QR is present.
+async function verifyAwash({ reference, qr, amount, receiverAccount }) {
+  // If a QR URL is provided, try to fetch and parse it (Awash receipts include QR codes)
+  if (qr && /^https?:\/\//i.test(qr)) {
+    try {
+      const res = await fetchWithTimeout(qr, {}, 8000);
+      if (res.ok) {
+        const html = await res.text();
+        const parsedAmount = parseAmount(html);
+        const receiver = parseReceiver(html);
+        if (parsedAmount) {
+          return { found: true, amount: parsedAmount, receiverAccount: receiver };
+        }
+      }
+    } catch (_) {
+      // QR fetch failed — fall through to manual review
+    }
+  }
+  // For reference-based lookup without a QR, return needs_review instead of hard failure
+  if (reference) {
+    return { found: false, needsReview: true, error: 'awash requires manual review — check statement' };
+  }
+  return { found: false, needsReview: true, error: 'awash has no public lookup — review/reconcile' };
 }
 
 router.post('/verify/:bank', async (req, res) => {

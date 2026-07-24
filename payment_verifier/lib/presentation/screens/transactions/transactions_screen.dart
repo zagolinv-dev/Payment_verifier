@@ -381,6 +381,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     'CBE',
     'BOA',
     'Telebirr',
+    'CBE Birr',
     'Awash',
   ];
 }

@@ -208,7 +208,7 @@ class VerificationService {
       steps.add(VStep('Extract receiver account', receiverAcct, StepState.pass));
     } else if (isTelebirr) {
       // Telebirr table receipts don't show an account number — skip
-      steps.add(const VStep('Extract receiver account', 'N/A (Telebirr)', StepState.pass));
+      steps.add(const VStep('Extract receiver account', 'N/A (mobile money)', StepState.pass));
     } else {
       // For other banks (e.g. CBE) — skip rather than fail if no account visible on receipt
       steps.add(const VStep('Extract receiver account', 'N/A (not on receipt)', StepState.pass));
@@ -312,6 +312,8 @@ class VerificationService {
 
   String _canonicalBank(String name) {
     final n = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
+    // Must check CBE Birr BEFORE the generic 'cbe' check
+    if (n.contains('cbe birr') || n.contains('cbebirr') || n.contains('cbe-birr')) return 'cbe_birr';
     if (n.contains('cbe') || n.contains('commercial') || n.contains('rely on') || n.contains('negid')) return 'cbe';
     if (n.contains('boa') || n.contains('abyssinia') || n.contains('abysinia') || n.contains('abysina') || n.contains('the choice for all') || n.contains('scan the qr')) {
       return 'boa';
@@ -333,8 +335,11 @@ class VerificationService {
     return _canonicalBank(detected) == _canonicalBank(selected);
   }
 
-  bool _isTelebirr(String? bank) =>
-      bank != null && _canonicalBank(bank) == 'telebirr';
+  bool _isTelebirr(String? bank) {
+    if (bank == null) return false;
+    final c = _canonicalBank(bank);
+    return c == 'telebirr' || c == 'cbe_birr';
+  }
 
   bool _suffixMatch(String masked, List<String> fulls) {
     final tail = RegExp(r'(\d{2,})\D*$').firstMatch(masked)?.group(1);
